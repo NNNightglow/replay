@@ -1,12 +1,15 @@
 # Frontend dependencies
 frontend/node_modules/
-
+frontend\dist
 # IDE
 .idea/
 
 # Python caches
 __pycache__/
 utils/__pycache__/
+
+#test
+test
 
 # Large data files
 data_cache/other/market_states.parquet
