@@ -76,18 +76,30 @@ class IndexVisualizer:
                     high_val = d.get('最高', d.get('最高价', 0))
                     k_data.append([float(open_val), float(close_val), float(low_val), float(high_val)])
                 
-                # 准备成交量数据（包含颜色信息）
-                volumes = []
+                # 准备成交额数据（包含颜色信息，单位：亿元）
+                amounts = []
                 for d in data_list:
-                    vol = d.get('volume', d.get('成交量', d.get('vol', 0)))
+                    # 优先使用成交额/amount；若缺失则用 收盘*成交量 近似
+                    amt = d.get('成交额', d.get('amount'))
+                    if amt is None:
+                        vol_fallback = d.get('成交量', d.get('volume', d.get('vol')))
+                        close_price = d.get('收盘', d.get('收盘价'))
+                        try:
+                            if vol_fallback is not None and close_price is not None:
+                                amt = float(vol_fallback) * float(close_price)
+                            else:
+                                amt = 0.0
+                        except Exception:
+                            amt = 0.0
+
                     open_val = d.get('开盘', d.get('开盘价', 0))
                     close_val = d.get('收盘', d.get('收盘价', 0))
                     
-                    # 根据K线涨跌确定成交量颜色
+                    # 根据K线涨跌确定成交额颜色
                     color = '#ef232a' if float(close_val) >= float(open_val) else '#14b143'
                     
-                    volumes.append({
-                        'value': float(vol) / 100000000,  # 转换为亿元
+                    amounts.append({
+                        'value': float(amt) / 100000000,  # 转换为亿元
                         'itemStyle': {'color': color}
                     })
                 
@@ -110,7 +122,7 @@ class IndexVisualizer:
                     'title': f'{index_name}指数K线图',
                     'dates': dates,
                     'kline_data': k_data,
-                    'volume_data': volumes,
+                    'amount_data': amounts,
                     'ma_data': ma_series
                 }
                 
@@ -185,11 +197,11 @@ class IndexVisualizer:
                                   // 补充其他系列（均线、成交量）
                                   for (var j = 0; j < params.length; j++) {
                                       var p = params[j];
-                                      if (p.seriesType !== 'candlestick' && p.seriesName !== '成交量') {
+                                      if (p.seriesType !== 'candlestick' && p.seriesName !== '成交额') {
                                           lines.push(p.seriesName + ': ' + (p.value == null ? '-' : p.value));
                                       }
-                                      if (p.seriesName === '成交量') {
-                                          lines.push('成交量: ' + (p.value == null ? '-' : p.value));
+                                      if (p.seriesName === '成交额') {
+                                          lines.push('成交额: ' + (p.value == null ? '-' : p.value) + '亿');
                                       }
                                   }
                                   return lines.join('<br/>');
@@ -211,20 +223,21 @@ class IndexVisualizer:
                         }
                     },
                     'legend': {
-                        'data': ['K线', 'MA5', 'MA10', 'MA20'],
+                        'data': ['K线', 'MA5', 'MA10', 'MA20', '成交额'],
                         'top': 30
                     },
                     'grid': [
                         {
                             'left': '10%',
                             'right': '8%',
-                            'height': '60%'
+                            'height': '62%'
                         },
                         {
                             'left': '10%',
                             'right': '8%',
-                            'top': '75%',
-                            'height': '15%'
+                            'top': '80%',
+                            'height': '12%',
+                            'bottom': '6%'
                         }
                     ],
                     'xAxis': [
@@ -261,10 +274,14 @@ class IndexVisualizer:
                             'scale': True,
                             'gridIndex': 1,
                             'splitNumber': 2,
-                            'axisLabel': {'show': False},
-                            'axisLine': {'show': False},
-                            'axisTick': {'show': False},
-                            'splitLine': {'show': False}
+                            'name': '成交额(亿)',
+                            'axisLabel': {
+                                'show': True,
+                                'formatter': '{value}亿'
+                            },
+                            'axisLine': {'show': True},
+                            'axisTick': {'show': True},
+                            'splitLine': {'show': True}
                         }
                     ],
                     'dataZoom': [
@@ -278,7 +295,7 @@ class IndexVisualizer:
                             'show': True,
                             'xAxisIndex': [0, 1],
                             'type': 'slider',
-                            'top': '90%',
+                            'top': '94%',
                             'start': 70,
                             'end': 100
                         }
@@ -341,11 +358,16 @@ class IndexVisualizer:
                             }
                         },
                         {
-                            'name': '成交量',
+                            'name': '成交额',
                             'type': 'bar',
                             'xAxisIndex': 1,
                             'yAxisIndex': 1,
-                            'data': chart_config['volume_data']
+                            'data': chart_config['amount_data'],
+                            'tooltip': {
+                                'valueFormatter': {
+                                    '__js_function__': 'function (val) { return (val == null ? "-" : (Number(val).toFixed(2) + "亿")); }'
+                                }
+                            }
                         }
                     ]
                 }
