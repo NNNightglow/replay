@@ -19,6 +19,8 @@ import threading
 import tempfile
 import shutil
 
+from utils.holiday_utils import china_holiday_util
+
 try:
     import fcntl
 except ImportError:
@@ -737,6 +739,9 @@ class MarketMetadataManager:
             if os.path.exists(self.market_states_path):
                 # 加载现有状态数据
                 existing_states = pl.read_parquet(self.market_states_path)
+                if self._has_null_values(existing_states):
+                    print("⚠️ 检测到市场状态数据存在空值，触发全量覆盖更新")
+                    return self.precompute_market_states()
                 latest_date = existing_states['日期'].max()
                 print(f"市场状态数据最新日期: {latest_date}")
                 # 加载股票元数据
@@ -761,9 +766,27 @@ class MarketMetadataManager:
                     print(f"增量更新计算趋势指标失败（忽略）: {_e}")
 
                 stock_data = stock_data.unique(subset=['日期', '名称'])
-                # 安全保存更新后的状态数据
-                if safe_write_parquet(stock_data, self.market_states_path):
-                    print("✅ 市场状态数据增量更新成功")
+                recent_dates = self._get_recent_dates(stock_data, 30)
+                if not recent_dates:
+                    print("⚠️ 未获取到可更新的日期范围，触发全量覆盖更新")
+                    return self.precompute_market_states()
+
+                recent_data = stock_data.filter(pl.col('日期').is_in(recent_dates))
+                if self._has_null_values(recent_data):
+                    print("⚠️ 新生成的最近数据存在空值，触发全量覆盖更新")
+                    return self.precompute_market_states()
+
+                updated_states = self._merge_recent_market_states(existing_states, recent_data, recent_dates)
+                if updated_states is None or updated_states.is_empty():
+                    print("⚠️ 合并后的市场状态数据为空，触发全量覆盖更新")
+                    return self.precompute_market_states()
+
+                if self._has_null_values(updated_states):
+                    print("⚠️ 合并后的市场状态数据存在空值，触发全量覆盖更新")
+                    return self.precompute_market_states()
+
+                if safe_write_parquet(updated_states, self.market_states_path):
+                    print("✅ 市场状态数据增量更新成功（重新覆盖最近30个交易日）")
                     return True
                 else:
                     print("❌ 市场状态数据增量更新失败")
@@ -776,6 +799,72 @@ class MarketMetadataManager:
             import traceback
             traceback.print_exc()
             return False
+
+    @staticmethod
+    def _has_null_values(df: Optional[pl.DataFrame]) -> bool:
+        if df is None or df.is_empty():
+            return False
+        checks = []
+        # 检查Null
+        checks.extend([
+            pl.col(col).is_null().any().alias(f"{col}__has_null")
+            for col in df.columns
+        ])
+        # 检查NaN（仅浮点列）
+        checks.extend([
+            pl.col(col).is_nan().any().alias(f"{col}__has_nan")
+            for col, dtype in df.schema.items()
+            if dtype in (pl.Float32, pl.Float64)
+        ])
+        result = df.select(checks).to_dicts()
+        if not result:
+            return False
+        return any(bool(flag) for flag in result[0].values())
+
+    @staticmethod
+    def _get_recent_dates(df: pl.DataFrame, days: int = 30) -> List[date]:
+        if df is None or df.is_empty() or days <= 0:
+            return []
+        date_series = df['日期'] if '日期' in df.columns else None
+        if date_series is None:
+            return []
+        date_list = []
+        for value in date_series.to_list():
+            parsed = _parse_to_date(value)
+            if parsed:
+                date_list.append(parsed)
+        if not date_list:
+            return []
+        unique_dates = sorted(set(date_list))
+        return unique_dates[-days:]
+
+    @staticmethod
+    def _merge_recent_market_states(existing: pl.DataFrame, recent_data: pl.DataFrame, recent_dates: List[date]) -> Optional[pl.DataFrame]:
+        if recent_data is None or recent_data.is_empty():
+            return existing
+        if existing is None or existing.is_empty():
+            return recent_data.sort(['日期', '名称']) if '名称' in recent_data.columns else recent_data.sort('日期')
+
+        mask_recent = pl.col('日期').is_in(recent_dates)
+        existing_others = existing.filter(~mask_recent)
+
+        union_cols = list(set(existing_others.columns) | set(recent_data.columns))
+        for col in union_cols:
+            if col not in existing_others.columns:
+                existing_others = existing_others.with_columns(pl.lit(None).alias(col))
+            if col not in recent_data.columns:
+                recent_data = recent_data.with_columns(pl.lit(None).alias(col))
+
+        existing_others = existing_others.select(union_cols)
+        recent_data = recent_data.select(union_cols)
+
+        merged = pl.concat([existing_others, recent_data], how='vertical')
+        if '日期' in merged.columns and '名称' in merged.columns:
+            merged = merged.sort(['日期', '名称'])
+        elif '日期' in merged.columns:
+            merged = merged.sort('日期')
+
+        return merged
 
     def calculate_daily_market_stats_optimized(self, stock_data, date_val):
         """优化的市场统计指标计算方法"""
@@ -1123,11 +1212,37 @@ class MarketMetadataManager:
                             dates_to_update.append(date_val)
                     dates_to_update = sorted(set(dates_to_update))
                 
-            # 如果没有需要更新的日期，返回成功
+            # 如果没有需要更新的日期，也继续执行最近30天覆盖刷新与空值检查
             if len(dates_to_update) == 0:
-                print("市场元数据已经是最新的，无需更新")
+                print("市场元数据没有新增交易日，执行最近30天覆盖刷新与空值检查…")
                 if progress_callback:
-                    progress_callback(100, 100, "市场元数据已经是最新的，无需更新")
+                    progress_callback(40, 100, "无新增交易日，进行最近30天覆盖刷新…")
+                # 将metadata设为现有元数据，后续走统一刷新与保存流程
+                metadata = existing_metadata if existing_metadata is not None else pl.DataFrame()
+                # 对最近30个交易日执行覆盖式刷新，确保无空值
+                recent_dates = self._get_recent_dates(market_states if metadata is None or metadata.is_empty() else metadata, 30)
+                if recent_dates:
+                    recent_refresh_df = self._recompute_market_metadata(market_states, recent_dates)
+                    metadata = self._replace_recent_rows(existing_metadata, recent_refresh_df, recent_dates)
+                # 空值检测，必要时触发全量重建
+                if self._has_null_values(metadata):
+                    print("⚠️ 刷新后的市场元数据存在空值，将尝试全量重建")
+                    if not self.precompute_market_states():
+                        raise Exception("全量重建市场状态数据失败，无法修复market_metadata空值")
+                    market_states = self.load_market_states()
+                    if market_states is None or market_states.is_empty():
+                        raise Exception("全量重建后市场状态数据为空")
+                    metadata = self._recompute_market_metadata(market_states, self._get_recent_dates(market_states, 30) or [])
+                    if metadata is None or metadata.is_empty():
+                        raise Exception("全量重建后市场元数据仍为空")
+                # 保存
+                if progress_callback:
+                    progress_callback(98, 100, "保存市场元数据…")
+                if not safe_write_parquet(metadata, self.metadata_path):
+                    raise Exception("保存市场元数据失败")
+                print("市场元数据刷新完成（无新增日期场景）")
+                if progress_callback:
+                    progress_callback(100, 100, "市场元数据更新完成")
                 return True
                 
             print(f"需要更新 {len(dates_to_update)} 个交易日的市场元数据")
@@ -1199,6 +1314,23 @@ class MarketMetadataManager:
             else:
                 metadata = market_stats_df
                 
+            # 对最近30个交易日执行覆盖式刷新，确保无空值
+            recent_dates = self._get_recent_dates(metadata, 30)
+            if recent_dates:
+                recent_refresh_df = self._recompute_market_metadata(market_states, recent_dates)
+                metadata = self._replace_recent_rows(metadata, recent_refresh_df, recent_dates)
+
+            if self._has_null_values(metadata):
+                print("⚠️ 刷新后的市场元数据仍存在空值，将尝试全量重建")
+                if not self.precompute_market_states():
+                    raise Exception("全量重建市场状态数据失败，无法修复market_metadata空值")
+                market_states = self.load_market_states()
+                if market_states is None or market_states.is_empty():
+                    raise Exception("全量重建后市场状态数据为空")
+                metadata = self._recompute_market_metadata(market_states, self._get_recent_dates(market_states, 30) or [])
+                if metadata is None or metadata.is_empty():
+                    raise Exception("全量重建后市场元数据仍为空")
+
             # 安全保存元数据
             if progress_callback:
                 progress_callback(98, 100, "保存市场元数据...")
@@ -1334,6 +1466,34 @@ class MarketMetadataManager:
                                             bj_amount = 0.0
 
                                         raw_amount = (sh_amount + sz_amount + bj_amount) / 100000000  # 亿元
+
+                                        amount_source = '指数元数据'
+
+                                        # 单位自检：若异常偏小（通常沪深两市日成交额合计应远大于100亿），
+                                        # 回退到AK日线权威值（单位：元）以避免数据源单位差异导致的低估。
+                                        try:
+                                            sh_yi = sh_amount / 100000000
+                                            sz_yi = sz_amount / 100000000
+                                            # 若总额或任一市场金额明显偏小，则触发回退
+                                            if raw_amount < 100 or sh_yi < 100 or sz_yi < 100:
+                                                import akshare as ak
+                                                ds = date_val.strftime('%Y%m%d') if hasattr(date_val, 'strftime') else str(date_val).replace('-', '')
+                                                _sh = ak.index_zh_a_hist(symbol='000001', period='daily', start_date=ds, end_date=ds)
+                                                _sz = ak.index_zh_a_hist(symbol='399001', period='daily', start_date=ds, end_date=ds)
+                                                _bj = None
+                                                try:
+                                                    _bj = ak.index_zh_a_hist(symbol='899050', period='daily', start_date=ds, end_date=ds)
+                                                except Exception:
+                                                    _bj = None
+                                                sh_amount = float(_sh['成交额'].iloc[-1]) if (_sh is not None and not _sh.empty and '成交额' in _sh.columns) else 0.0
+                                                sz_amount = float(_sz['成交额'].iloc[-1]) if (_sz is not None and not _sz.empty and '成交额' in _sz.columns) else 0.0
+                                                bj_amount = float(_bj['成交额'].iloc[-1]) if (_bj is not None and not _bj.empty and '成交额' in _bj.columns) else 0.0
+                                                raw_amount = (sh_amount + sz_amount + bj_amount) / 100000000
+                                                amount_source = '指数元数据(AK校准)'
+                                                print(f"⚠️ 指数元数据成交额疑似单位异常，已改用AK日线: 上证{sh_amount/100000000:.2f}亿 + 深证{sz_amount/100000000:.2f}亿 + 北证{bj_amount/100000000:.2f}亿 = {raw_amount:.2f}亿")
+                                        except Exception:
+                                            pass
+
                                         stats['成交总额'] = raw_amount
                                         print(f"从指数元数据中获取成交额: 上证{sh_amount/100000000:.2f}亿 + 深证{sz_amount/100000000:.2f}亿 + 北证{bj_amount/100000000:.2f}亿 = {stats['成交总额']:.2f}亿")
                                         
@@ -1385,7 +1545,13 @@ class MarketMetadataManager:
                                         # 添加日期
                                         stats['日期'] = date_val
                                         
-                                        return stats
+                                        # 仅当从指数元数据计算的成交额有效(>0)时直接返回；
+                                        # 否则继续走后续回退逻辑，用stock日K或market_states汇总填充，避免误写0。
+                                        try:
+                                            if stats['成交总额'] is not None and float(stats['成交总额']) > 0:
+                                                return stats
+                                        except Exception:
+                                            pass
                     except Exception as e:
                         print(f"从指数元数据获取市场量能时出错: {str(e)}")
                 
@@ -1484,9 +1650,8 @@ class MarketMetadataManager:
             # 检查今天是否是交易日
             is_weekend = today.weekday() >= 5  # 周末
             try:
-                from utils.visualizer import CHINA_HOLIDAYS
-                is_holiday = today.strftime('%Y-%m-%d') in CHINA_HOLIDAYS
-            except:
+                is_holiday = china_holiday_util.is_holiday(today)
+            except Exception:
                 is_holiday = False
 
             is_trading_day = not (is_weekend or is_holiday)
@@ -1504,3 +1669,68 @@ class MarketMetadataManager:
         except Exception as e:
             print(f"检查市场状态数据最新日期失败: {e}")
             return False
+
+    def _recompute_market_metadata(self, market_states: pl.DataFrame, dates: List[date]) -> pl.DataFrame:
+        if not dates:
+            return pl.DataFrame()
+        dates = sorted(set(_parse_to_date(d) for d in dates if d is not None))
+        if not dates:
+            return pl.DataFrame()
+
+        rows = []
+        for d in dates:
+            day_states = market_states.filter(pl.col('日期') == pl.lit(d))
+            stats = self.calculate_daily_market_stats_from_states(day_states, d)
+            rows.append(stats)
+
+        if not rows:
+            return pl.DataFrame()
+
+        refreshed = pl.DataFrame(rows)
+        if '日期' in refreshed.columns:
+            refreshed = _ensure_date_column(refreshed, '日期')
+        return refreshed
+
+    def _replace_recent_rows(self, existing: Optional[pl.DataFrame], recent: pl.DataFrame, recent_dates: List[date]) -> pl.DataFrame:
+        if recent is None or recent.is_empty():
+            return existing if existing is not None else pl.DataFrame()
+
+        recent_dates = [d for d in (recent_dates or []) if d is not None]
+        if not recent_dates:
+            return existing if existing is not None else recent
+
+        recent = _ensure_date_column(recent, '日期')
+
+        if existing is None or existing.is_empty():
+            return recent.sort('日期') if '日期' in recent.columns else recent
+
+        existing = _ensure_date_column(existing, '日期')
+
+        mask = pl.col('日期').is_in(recent_dates)
+        existing_others = existing.filter(~mask)
+
+        union_cols = list(set(existing_others.columns) | set(recent.columns))
+        for col in union_cols:
+            if col not in existing_others.columns:
+                existing_others = existing_others.with_columns(pl.lit(None).alias(col))
+            if col not in recent.columns:
+                recent = recent.with_columns(pl.lit(None).alias(col))
+
+        # 不再持久化 `成交额来源`，如存在则在合并前去除该列，避免落盘结构变动
+        if '成交额来源' in existing_others.columns:
+            existing_others = existing_others.drop('成交额来源')
+        if '成交额来源' in recent.columns:
+            recent = recent.drop('成交额来源')
+        if '成交额来源' in union_cols:
+            union_cols.remove('成交额来源')
+
+        existing_others = existing_others.select(union_cols)
+        recent = recent.select(union_cols)
+
+        merged = pl.concat([existing_others, recent], how='vertical')
+        if '日期' in merged.columns and '名称' in merged.columns:
+            merged = merged.sort(['日期', '名称'])
+        elif '日期' in merged.columns:
+            merged = merged.sort('日期')
+
+        return merged

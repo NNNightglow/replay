@@ -295,7 +295,7 @@ class IndexMetadataManager:
                     updated_metadata = new_index_data
             else:
                 updated_metadata = new_index_data
-            updated_metadata = updated_metadata.unique(subset=['日期', '代码'])
+            updated_metadata = updated_metadata.unique(subset=['日期', '代码'], keep='last')
 
             # 保存数据
             updated_metadata.write_parquet(self.metadata_path)
@@ -488,31 +488,6 @@ class IndexMetadataManager:
             end_date=end_date,
         )
 
-    def _fetch_index_via_tencent(self, index_info: Dict[str, str], start_date: str, end_date: str):
-        symbol = self._build_exchange_symbol(index_info['code'])
-        df = ak.stock_zh_index_daily_tx(symbol=symbol)
-        if df is None or df.empty:
-            return df
-
-        df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
-        start_dt = self._safe_parse_date(start_date, default=df['date'].min())
-        end_dt = self._safe_parse_date(end_date, default=df['date'].max())
-        mask = (df['date'] >= start_dt) & (df['date'] <= end_dt)
-        return df.loc[mask]
-
-    def _fetch_index_via_sina(self, index_info: Dict[str, str], start_date: str, end_date: str):
-        symbol = self._build_exchange_symbol(index_info['code'])
-        df = ak.stock_zh_index_daily(symbol=symbol)
-        if df is None or df.empty:
-            return df
-
-        df = df.copy()
-        df['date'] = pd.to_datetime(df['date'])
-        start_dt = self._safe_parse_date(start_date, default=df['date'].min())
-        end_dt = self._safe_parse_date(end_date, default=df['date'].max())
-        mask = (df['date'] >= start_dt) & (df['date'] <= end_dt)
-        return df.loc[mask]
 
     def _fetch_index_minute_with_fallback(self, code: str, start_dt: str, end_dt: str, period: str = "5") -> pd.DataFrame:
         strategies: List[Tuple[str, Callable[[], Optional[pd.DataFrame]]]] = [
@@ -612,6 +587,14 @@ class IndexMetadataManager:
 
         df_copy = df.copy()
 
+        # 先显式处理 baostock 典型列，防止重命名时发生歧义
+        # 如果原始列存在英文 amount/volume，则优先生成中文列
+        if 'amount' in df_copy.columns and '成交额' not in df_copy.columns:
+            df_copy['成交额'] = pd.to_numeric(df_copy['amount'], errors='coerce')
+        if 'volume' in df_copy.columns and '成交量' not in df_copy.columns:
+            df_copy['成交量'] = pd.to_numeric(df_copy['volume'], errors='coerce')
+
+        # 其余列统一重命名为标准中文列
         column_mapping = {
             '日期': '日期',
             'date': '日期',
@@ -625,12 +608,19 @@ class IndexMetadataManager:
             '最低价': '最低',
             'low': '最低',
             '成交量': '成交量',
-            'volume': '成交量',
-            '成交额': '成交额',
-            'amount': '成交额'
+            # 英文 volume/amount 已在上方显式处理，避免与已有中文列名冲突
+            '成交额': '成交额'
         }
 
         df_copy = df_copy.rename(columns={k: v for k, v in column_mapping.items() if k in df_copy.columns})
+
+        # 清理英文冗余列，避免后续保存到 parquet 出现混淆
+        for redundant_col in ['amount', 'volume']:
+            if redundant_col in df_copy.columns:
+                try:
+                    df_copy.drop(columns=[redundant_col], inplace=True)
+                except Exception:
+                    pass
 
         # 日期列统一为日期类型
         if '日期' in df_copy.columns:
