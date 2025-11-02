@@ -1,0 +1,28 @@
+{
+  "name": "stock-analysis-frontend",
+  "version": "1.0.0",
+  "description": "股票分析系统前端 - Vue.js",
+  "main": "index.js",
+  "scripts": {
+    "serve": "vue-cli-service serve",
+    "build": "vue-cli-service build",
+    "dev": "npm run serve"
+  },
+  "dependencies": {
+    "vue": "^3.3.0",
+    "vue-router": "^4.2.0",
+    "axios": "^1.4.0",
+    "element-plus": "^2.3.0",
+    "echarts": "^5.4.0",
+    "vue-echarts": "^6.6.0"
+  },
+  "devDependencies": {
+    "@vue/cli-service": "^5.0.0",
+    "vue-template-compiler": "^2.7.0"
+  },
+  "browserslist": [
+    "> 1%",
+    "last 2 versions",
+    "not dead"
+  ]
+}

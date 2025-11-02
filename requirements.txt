@@ -1,0 +1,75 @@
+# 股票数据增强脚本依赖库
+# Stock Data Enhancer Dependencies - Replay Environment
+
+# 核心数据处理库 (Core Data Processing)
+pandas==2.3.1
+polars==0.19.12
+numpy==2.2.6
+pyarrow==20.0.0
+
+# Excel文件处理 (Excel File Processing)
+openpyxl==3.1.5
+xlrd==2.0.1
+xlsxwriter==3.2.5
+
+# 图表绘制 (Chart Generation)
+matplotlib==3.10.3
+pillow==11.2.1
+
+# 股票数据获取 (Stock Data APIs)
+akshare==1.17.19
+baostock==0.8.9
+pywencai==0.13.1
+
+# Web框架 (Web Frameworks)
+streamlit==1.45.1
+flask==2.3.3
+flask-cors==4.0.0
+fastapi==0.116.1
+uvicorn==0.35.0
+Jinja2==3.1.6
+Werkzeug==3.1.3
+
+# 数据可视化 (Data Visualization)
+plotly==5.17.0
+pyecharts==2.0.8
+
+# HTTP请求 (HTTP Requests)
+requests==2.31.0
+aiohttp==3.12.0
+
+# 数据验证 (Data Validation)
+pydantic==2.11.7
+
+# 日期时间处理 (Date/Time Processing)
+python-dateutil==2.8.2
+pytz==2025.2
+holidays==0.73
+
+# 科学计算 (Scientific Computing)
+scipy==1.15.3
+scikit-learn==1.6.1
+
+# 工具库 (Utility Libraries)
+tqdm==4.67.1
+beautifulsoup4==4.13.4
+lxml==5.4.0
+colorama==0.4.6
+packaging==24.2
+filelock==3.18.0
+
+# JSON处理 (JSON Processing)
+jsonpath==0.82.2
+simplejson==3.20.1
+
+# 表格显示 (Table Display)
+tabulate==0.9.0
+prettytable==3.16.0
+
+# 可选依赖 (Optional Dependencies)
+altair==5.5.0
+joblib==1.5.1
+tenacity==9.1.2
+
+# 开发与测试 (Dev & Test)
+pytest==8.4.1

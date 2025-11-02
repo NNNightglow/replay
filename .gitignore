@@ -1,0 +1,13 @@
+# Frontend dependencies
+frontend/node_modules/
+
+# IDE
+.idea/
+
+# Python caches
+__pycache__/
+utils/__pycache__/
+
+# Large data files
+data_cache/other/market_states.parquet
+data_cache/stock_daily/stock_daily_metadata.parquet

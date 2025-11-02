@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>股票分析系统 - Flask后端</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: white;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.37);
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        .api-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            border-left: 4px solid #4CAF50;
+        }
+        .api-section h2 {
+            margin-top: 0;
+            color: #4CAF50;
+        }
+        .api-list {
+            list-style: none;
+            padding: 0;
+        }
+        .api-list li {
+            margin: 10px 0;
+            padding: 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        .method {
+            color: #FFD700;
+            font-weight: bold;
+        }
+        .endpoint {
+            color: #87CEEB;
+        }
+        .description {
+            color: #98FB98;
+            font-style: italic;
+        }
+        .status {
+            text-align: center;
+            padding: 15px;
+            background: rgba(76, 175, 80, 0.2);
+            border-radius: 10px;
+            margin: 20px 0;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 股票分析系统 Flask后端</h1>
+        
+        <div class="status">
+            <h2>✅ 后端服务运行中</h2>
+            <p>Flask API服务已启动，端口: 5000</p>
+            <p>前端访问地址: <a href="http://localhost:8080" style="color: #FFD700;">http://localhost:8080</a></p>
+        </div>
+
+        <div class="api-section">
+            <h2>📊 市场数据API</h2>
+            <ul class="api-list">
+                <li><span class="method">GET</span> <span class="endpoint">/api/market/overview</span> - <span class="description">获取市场概览数据</span></li>
+                <li><span class="method">GET</span> <span class="endpoint">/api/market/sentiment</span> - <span class="description">获取市场情绪数据</span></li>
+                <li><span class="method">GET</span> <span class="endpoint">/api/market/indices</span> - <span class="description">获取指数数据</span></li>
+            </ul>
+        </div>
+
+        <div class="api-section">
+            <h2>📈 股票数据API</h2>
+            <ul class="api-list">
+                <li><span class="method">POST</span> <span class="endpoint">/api/stocks/new-high</span> - <span class="description">获取新高股票数据</span></li>
+                <li><span class="method">GET</span> <span class="endpoint">/api/stocks/{stock_code}/kline</span> - <span class="description">获取股票K线数据</span></li>
+            </ul>
+        </div>
+
+        <div class="api-section">
+            <h2>🔍 分析功能API</h2>
+            <ul class="api-list">
+                <li><span class="method">GET</span> <span class="endpoint">/api/analysis/heima</span> - <span class="description">黑马分析</span></li>
+                <li><span class="method">POST</span> <span class="endpoint">/api/analysis/baima</span> - <span class="description">白马分析</span></li>
+            </ul>
+        </div>
+
+        <div class="api-section">
+            <h2>🏢 板块数据API</h2>
+            <ul class="api-list">
+                <li><span class="method">GET</span> <span class="endpoint">/api/sectors</span> - <span class="description">获取行业板块数据</span></li>
+                <li><span class="method">GET</span> <span class="endpoint">/api/concepts</span> - <span class="description">获取概念板块数据</span></li>
+            </ul>
+        </div>
+
+        <div class="footer">
+            <p>🎯 Vue.js + Flask 架构 | 完整功能迁移</p>
+            <p>💡 使用replay虚拟环境 | 数据缓存优化</p>
+        </div>
+    </div>
+</body>
+</html>
