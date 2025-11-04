@@ -7,7 +7,7 @@ module.exports = defineConfig({
   devServer: {
     port: 8081,
     host: '0.0.0.0',
-    open: true,
+    open: false,  // 由 start_system.bat 统一控制打开浏览器
     historyApiFallback: true, // 支持HTML5 History模式
     client: {
       overlay: {

@@ -499,7 +499,7 @@ def index():
             <div class="status">
                 <h2>✅ 后端服务运行中</h2>
                 <p>Flask API服务已启动，端口: 5000</p>
-                <p>前端访问地址: <a href="http://localhost:8080" style="color: #FFD700;">http://localhost:8080</a></p>
+                <p>前端访问地址: <a href="http://localhost:8081" style="color: #FFD700;">http://localhost:8081</a></p>
                 <p>📁 数据缓存: 与Streamlit共享data_cache目录</p>
             </div>
 
@@ -3803,7 +3803,7 @@ if __name__ == '__main__':
         print("🚀 启动股票分析系统Flask后端...")
         print("📊 Vue.js + Flask架构")
         print("🌐 后端API地址: http://localhost:5000")
-        print("🌐 前端访问地址: http://localhost:8080")
+        print("🌐 前端访问地址: http://localhost:8081")
         
         # 启动Flask应用 - 启用调试模式以便查看日志
         app.run(
