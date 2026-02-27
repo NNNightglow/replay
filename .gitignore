@@ -13,7 +13,7 @@ test/
 
 # Large data files
 data_cache
-#.env
+.env
 .cursor
 .npm-cache
 
