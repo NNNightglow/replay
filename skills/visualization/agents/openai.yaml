@@ -1,0 +1,6 @@
+﻿# 技能代理接口
+# 接口定义
+interface:
+  display_name: "A 股可视化"
+  short_description: "面向个股/指数/板块/市场的图表路由与生成。"
+  default_prompt: "使用 $visualization 选择合适的图表 API，并从市场数据生成可靠的可视化输出。"

@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link rel="icon" href="<%= BASE_URL %>favicon.ico">
+    <title>股票分析系统 - Vue + Flask</title>
+    
+    <!-- SEO优化 -->
+    <meta name="description" content="股票复盘分析系统">
+    
+    <!-- 移动端优化 -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="股票分析系统">
+    
+    <!-- 预加载关键资源 -->
+    <link rel="preconnect" href="https://cdn.jsdelivr.net">
+    <link rel="dns-prefetch" href="//localhost:5000">
+
+    <!-- ECharts库 -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.0/dist/echarts.min.js"></script>
+    
+    <!-- 样式预加载 -->
+    <style>
+      /* 加载动画 */
+      #loading {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 9999;
+        color: white;
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      }
+      
+      .loading-content {
+        text-align: center;
+      }
+      
+      .loading-spinner {
+        width: 50px;
+        height: 50px;
+        border: 3px solid rgba(255, 255, 255, 0.3);
+        border-top: 3px solid white;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+      }
+      
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      
+      .loading-text {
+        font-size: 18px;
+        margin-bottom: 10px;
+      }
+      
+      .loading-desc {
+        font-size: 14px;
+        opacity: 0.8;
+      }
+    </style>
+  </head>
+  <body>
+    <noscript>
+      <strong>很抱歉，股票分析系统需要JavaScript支持才能正常运行。请启用JavaScript后重新访问。</strong>
+    </noscript>
+    
+    <!-- 加载动画 -->
+    <div id="loading">
+      <div class="loading-content">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">📊 股票分析系统</div>
+        <div class="loading-desc">Vue.js + Flask · 正在加载...</div>
+      </div>
+    </div>
+    
+    <!-- Vue应用挂载点 -->
+    <div id="app"></div>
+    
+    <!-- 移除加载动画的脚本 -->
+    <script>
+      // 当Vue应用挂载完成后移除加载动画
+      window.addEventListener('load', function() {
+        setTimeout(function() {
+          const loading = document.getElementById('loading');
+          if (loading) {
+            loading.style.opacity = '0';
+            loading.style.transition = 'opacity 0.5s ease';
+            setTimeout(function() {
+              loading.remove();
+            }, 500);
+          }
+        }, 1000);
+      });
+      
+      // 错误处理
+      window.addEventListener('error', function(e) {
+        console.error('页面加载错误:', e.error);
+      });
+      
+      // 性能监控
+      window.addEventListener('load', function() {
+        if (window.performance) {
+          const loadTime = window.performance.timing.loadEventEnd - window.performance.timing.navigationStart;
+          console.log(`📊 页面加载时间: ${loadTime}ms`);
+        }
+      });
+    </script>
+    
+    <!-- built files will be auto injected -->
+  </body>
+</html>

@@ -1,0 +1,6 @@
+﻿# 技能代理接口
+# 接口定义
+interface:
+  display_name: "多格式转 Markdown"
+  short_description: "将 PDF、Word、图片、音视频转换为 Markdown。"
+  default_prompt: "将输入文件转换为适合 LLM 上传的 Markdown。"

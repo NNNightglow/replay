@@ -1,0 +1,46 @@
+# Core data
+pandas==2.3.1
+polars==0.19.12
+numpy==2.2.6
+pyarrow==20.0.0
+
+# Market data sources
+akshare==1.17.19
+baostock==0.8.9
+pywencai==0.13.1
+
+# Backend server
+Flask==2.3.3
+Werkzeug==3.1.3
+waitress==3.0.2
+
+# Visualization / parsing
+pyecharts==2.0.8
+beautifulsoup4==4.13.4
+requests==2.32.5
+holidays==0.73
+
+# Excel export
+openpyxl==3.1.5
+xlsxwriter==3.2.5
+
+# Strategy watch file conversion
+Pillow==11.2.1
+PyMuPDF==1.27.1
+pypdfium2==5.5.0
+pypdf==6.7.2
+pytesseract==0.3.13
+python-docx==1.2.0
+faster-whisper==1.2.1
+openai-whisper==20250625
+torch==2.10.0
+
+# Agent runtime
+agentscope==1.0.16
+agentscope-runtime==1.1.0
+
+# PDF export for crawler
+reportlab==4.4.10
+
+# Dev
+pytest==8.4.1

@@ -1,0 +1,23 @@
+# Frontend dependencies
+frontend/node_modules/
+frontend\dist
+# IDE
+.idea/
+
+# Python caches
+__pycache__/
+utils/__pycache__/
+
+#test
+test/
+
+# Large data files
+data_cache
+#.env
+.cursor
+.npm-cache
+
+# Unused local skills (not referenced by runtime)
+skills/plan-and-task/
+skills/skill-editor/
+skills/stock-tag/
