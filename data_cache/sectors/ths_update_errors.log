@@ -1,0 +1,553 @@
+[2025-08-12 00:08:30] 获取房地产数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:08:34] 获取房地产数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:08:44] 获取轨交设备数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:08:56] 获取机场航运数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:00] 获取家居用品数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:05] 获取金属新材料数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:11] 获取煤炭开采加工数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:17] 获取汽车服务及其他数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:24] 获取软件开发数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:32] 获取通信设备数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:37] 获取通用设备数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:44] 获取小金属数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:51] 获取医疗器械数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:09:57] 获取油气开采及服务数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:10:03] 获取银行数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:10:12] 获取专用设备数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:10:16] 获取造纸数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:10:40] 获取AI语料数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:10:52] 获取参股保险数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:10:56] 获取参股保险数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:11:04] 获取宁德时代概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:11:13] 获取长三角一体化数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:11:53] 获取ETC数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:12:04] 获取风电数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:12:09] 获取氟化工概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:12:14] 获取氟化工概念数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:12:33] 获取共同富裕示范区数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:12:37] 获取共同富裕示范区数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:12:52] 获取光热发电数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:13:04] 获取国资云数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:13:23] 获取互联网医疗数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:13:27] 获取互联网医疗数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:13:37] 获取黄金概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:13:49] 获取华为昇腾数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:14:06] 获取金属回收数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:14:19] 获取可降解塑料数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:14:36] 获取旅游概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:14:43] 获取煤化工概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:14:51] 获取钠离子电池数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:02] 获取PCB概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:10] 获取苹果概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:23] 获取禽流感数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:40] 获取人脸识别数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:45] 获取人脸识别数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:51] 获取人脸识别数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:15:59] 获取柔性屏(折叠屏)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:16:16] 获取食品安全数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:16:21] 获取食品安全数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:16:36] 获取数字孪生数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:16:42] 获取Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:16:49] 获取算力租赁数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:16:54] 获取算力租赁数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:01] 获取钛白粉概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:06] 获取太赫兹数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:11] 获取碳交易数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:19] 获取特钢概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:24] 获取腾讯概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:29] 获取腾讯概念数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:40] 获取天然气数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:47] 获取同花顺出海50数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:17:58] 获取托育服务数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:18:19] 获取先进封装数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:18:30] 获取星闪概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:18:54] 获取央企国企改革数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:19:00] 获取盐湖提锂数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:19:04] 获取盐湖提锂数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:19:29] 获取医药电商数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:19:33] 获取医药电商数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:19:57] 获取智能医疗数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:20:31] 获取2025中报预增数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:20:36] 获取中国AI 50数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:20:47] 获取华为数字能源数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:20:56] 获取西部大开发数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:31:29] 获取房地产数据失败 (尝试 1): '房地产'
+[2025-08-12 00:31:32] 获取房地产数据失败 (尝试 2): '房地产'
+[2025-08-12 00:31:39] 获取房地产数据失败 (尝试 3): '房地产'
+[2025-08-12 00:31:42] 获取轨交设备数据失败 (尝试 1): '轨交设备'
+[2025-08-12 00:31:46] 获取轨交设备数据失败 (尝试 2): '轨交设备'
+[2025-08-12 00:31:52] 获取轨交设备数据失败 (尝试 3): '轨交设备'
+[2025-08-12 00:31:53] 获取机场航运数据失败 (尝试 1): '机场航运'
+[2025-08-12 00:31:58] 获取机场航运数据失败 (尝试 2): '机场航运'
+[2025-08-12 00:32:04] 获取机场航运数据失败 (尝试 3): '机场航运'
+[2025-08-12 00:32:06] 获取家居用品数据失败 (尝试 1): '家居用品'
+[2025-08-12 00:32:09] 获取家居用品数据失败 (尝试 2): '家居用品'
+[2025-08-12 00:32:15] 获取家居用品数据失败 (尝试 3): '家居用品'
+[2025-08-12 00:32:18] 获取金属新材料数据失败 (尝试 1): '金属新材料'
+[2025-08-12 00:32:22] 获取金属新材料数据失败 (尝试 2): '金属新材料'
+[2025-08-12 00:32:27] 获取金属新材料数据失败 (尝试 3): '金属新材料'
+[2025-08-12 00:32:28] 获取煤炭开采加工数据失败 (尝试 1): '煤炭开采加工'
+[2025-08-12 00:32:33] 获取煤炭开采加工数据失败 (尝试 2): '煤炭开采加工'
+[2025-08-12 00:32:39] 获取煤炭开采加工数据失败 (尝试 3): '煤炭开采加工'
+[2025-08-12 00:32:40] 获取汽车服务及其他数据失败 (尝试 1): '汽车服务及其他'
+[2025-08-12 00:32:43] 获取汽车服务及其他数据失败 (尝试 2): '汽车服务及其他'
+[2025-08-12 00:32:49] 获取汽车服务及其他数据失败 (尝试 3): '汽车服务及其他'
+[2025-08-12 00:32:50] 获取软件开发数据失败 (尝试 1): '软件开发'
+[2025-08-12 00:32:53] 获取软件开发数据失败 (尝试 2): '软件开发'
+[2025-08-12 00:33:00] 获取软件开发数据失败 (尝试 3): '软件开发'
+[2025-08-12 00:33:02] 获取通信设备数据失败 (尝试 1): '通信设备'
+[2025-08-12 00:33:06] 获取通信设备数据失败 (尝试 2): '通信设备'
+[2025-08-12 00:33:13] 获取通信设备数据失败 (尝试 3): '通信设备'
+[2025-08-12 00:33:15] 获取通用设备数据失败 (尝试 1): '通用设备'
+[2025-08-12 00:33:18] 获取通用设备数据失败 (尝试 2): '通用设备'
+[2025-08-12 00:33:24] 获取通用设备数据失败 (尝试 3): '通用设备'
+[2025-08-12 00:33:26] 获取小金属数据失败 (尝试 1): '小金属'
+[2025-08-12 00:33:31] 获取小金属数据失败 (尝试 2): '小金属'
+[2025-08-12 00:33:36] 获取小金属数据失败 (尝试 3): '小金属'
+[2025-08-12 00:33:38] 获取医疗器械数据失败 (尝试 1): '医疗器械'
+[2025-08-12 00:33:42] 获取医疗器械数据失败 (尝试 2): '医疗器械'
+[2025-08-12 00:33:49] 获取医疗器械数据失败 (尝试 3): '医疗器械'
+[2025-08-12 00:33:51] 获取油气开采及服务数据失败 (尝试 1): '油气开采及服务'
+[2025-08-12 00:33:54] 获取油气开采及服务数据失败 (尝试 2): '油气开采及服务'
+[2025-08-12 00:34:00] 获取油气开采及服务数据失败 (尝试 3): '油气开采及服务'
+[2025-08-12 00:34:01] 获取银行数据失败 (尝试 1): '银行'
+[2025-08-12 00:34:06] 获取银行数据失败 (尝试 2): '银行'
+[2025-08-12 00:34:12] 获取银行数据失败 (尝试 3): '银行'
+[2025-08-12 00:34:13] 获取专用设备数据失败 (尝试 1): '专用设备'
+[2025-08-12 00:34:17] 获取专用设备数据失败 (尝试 2): '专用设备'
+[2025-08-12 00:34:24] 获取专用设备数据失败 (尝试 3): '专用设备'
+[2025-08-12 00:34:25] 获取造纸数据失败 (尝试 1): '造纸'
+[2025-08-12 00:34:30] 获取造纸数据失败 (尝试 2): '造纸'
+[2025-08-12 00:34:37] 获取造纸数据失败 (尝试 3): '造纸'
+[2025-08-12 00:34:44] 获取宁德时代数据失败 (尝试 1): '宁德时代'
+[2025-08-12 00:34:48] 获取宁德时代数据失败 (尝试 2): '宁德时代'
+[2025-08-12 00:34:53] 获取宁德时代数据失败 (尝试 3): '宁德时代'
+[2025-08-12 00:35:04] 获取氟化工数据失败 (尝试 1): '氟化工'
+[2025-08-12 00:35:08] 获取氟化工数据失败 (尝试 2): '氟化工'
+[2025-08-12 00:35:14] 获取氟化工数据失败 (尝试 3): '氟化工'
+[2025-08-12 00:35:27] 获取黄金数据失败 (尝试 1): '黄金'
+[2025-08-12 00:35:31] 获取黄金数据失败 (尝试 2): '黄金'
+[2025-08-12 00:35:37] 获取黄金数据失败 (尝试 3): '黄金'
+[2025-08-12 00:35:47] 获取旅游数据失败 (尝试 1): '旅游'
+[2025-08-12 00:35:51] 获取旅游数据失败 (尝试 2): '旅游'
+[2025-08-12 00:35:57] 获取旅游数据失败 (尝试 3): '旅游'
+[2025-08-12 00:36:00] 获取煤化工数据失败 (尝试 1): '煤化工'
+[2025-08-12 00:36:04] 获取煤化工数据失败 (尝试 2): '煤化工'
+[2025-08-12 00:36:10] 获取煤化工数据失败 (尝试 3): '煤化工'
+[2025-08-12 00:36:15] 获取PCB数据失败 (尝试 1): 'PCB'
+[2025-08-12 00:36:20] 获取PCB数据失败 (尝试 2): 'PCB'
+[2025-08-12 00:36:25] 获取PCB数据失败 (尝试 3): 'PCB'
+[2025-08-12 00:36:27] 获取苹果数据失败 (尝试 1): '苹果'
+[2025-08-12 00:36:30] 获取苹果数据失败 (尝试 2): '苹果'
+[2025-08-12 00:36:37] 获取苹果数据失败 (尝试 3): '苹果'
+[2025-08-12 00:36:55] 获取Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements数据失败 (尝试 1): 'Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements'
+[2025-08-12 00:36:59] 获取Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements数据失败 (尝试 2): 'Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements'
+[2025-08-12 00:37:06] 获取Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements数据失败 (尝试 3): 'Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements'
+[2025-08-12 00:37:11] 获取钛白粉数据失败 (尝试 1): '钛白粉'
+[2025-08-12 00:37:15] 获取钛白粉数据失败 (尝试 2): '钛白粉'
+[2025-08-12 00:37:21] 获取钛白粉数据失败 (尝试 3): '钛白粉'
+[2025-08-12 00:37:29] 获取特钢数据失败 (尝试 1): '特钢'
+[2025-08-12 00:37:34] 获取特钢数据失败 (尝试 2): '特钢'
+[2025-08-12 00:37:40] 获取特钢数据失败 (尝试 3): '特钢'
+[2025-08-12 00:37:43] 获取腾讯数据失败 (尝试 1): '腾讯'
+[2025-08-12 00:37:47] 获取腾讯数据失败 (尝试 2): '腾讯'
+[2025-08-12 00:37:54] 获取腾讯数据失败 (尝试 3): '腾讯'
+[2025-08-12 00:38:07] 获取星闪数据失败 (尝试 1): '星闪'
+[2025-08-12 00:38:12] 获取星闪数据失败 (尝试 2): '星闪'
+[2025-08-12 00:38:18] 获取星闪数据失败 (尝试 3): '星闪'
+[2025-08-12 00:39:28] 获取房地产数据失败 (尝试 1): '房地产'
+[2025-08-12 00:39:32] 获取房地产数据失败 (尝试 2): '房地产'
+[2025-08-12 00:39:38] 获取房地产数据失败 (尝试 3): '房地产'
+[2025-08-12 00:39:41] 获取轨交设备数据失败 (尝试 1): '轨交设备'
+[2025-08-12 00:39:45] 获取轨交设备数据失败 (尝试 2): '轨交设备'
+[2025-08-12 00:39:52] 获取轨交设备数据失败 (尝试 3): '轨交设备'
+[2025-08-12 00:39:55] 获取机场航运数据失败 (尝试 1): '机场航运'
+[2025-08-12 00:41:27] 获取油气开采及服务数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:42:01] 获取风电数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:42:52] 获取柔性屏数据失败 (尝试 1): '柔性屏'
+[2025-08-12 00:42:56] 获取柔性屏数据失败 (尝试 2): '柔性屏'
+[2025-08-12 00:43:01] 获取柔性屏数据失败 (尝试 3): '柔性屏'
+[2025-08-12 00:43:09] 获取Sora概念数据失败 (尝试 1): 'Sora概念'
+[2025-08-12 00:43:12] 获取Sora概念数据失败 (尝试 2): 'Sora概念'
+[2025-08-12 00:43:19] 获取Sora概念数据失败 (尝试 3): 'Sora概念'
+[2025-08-12 00:44:20] 获取宁德时代数据失败 (尝试 1): '宁德时代'
+[2025-08-12 00:44:25] 获取宁德时代数据失败 (尝试 2): '宁德时代'
+[2025-08-12 00:44:31] 获取宁德时代数据失败 (尝试 3): '宁德时代'
+[2025-08-12 00:44:34] 获取氟化工数据失败 (尝试 1): '氟化工'
+[2025-08-12 00:44:39] 获取氟化工数据失败 (尝试 2): '氟化工'
+[2025-08-12 00:44:44] 获取氟化工数据失败 (尝试 3): '氟化工'
+[2025-08-12 00:44:47] 获取黄金数据失败 (尝试 1): '黄金'
+[2025-08-12 00:44:50] 获取黄金数据失败 (尝试 2): '黄金'
+[2025-08-12 00:44:57] 获取黄金数据失败 (尝试 3): '黄金'
+[2025-08-12 00:45:00] 获取旅游数据失败 (尝试 1): '旅游'
+[2025-08-12 00:45:04] 获取旅游数据失败 (尝试 2): '旅游'
+[2025-08-12 00:45:11] 获取旅游数据失败 (尝试 3): '旅游'
+[2025-08-12 00:45:13] 获取煤化工数据失败 (尝试 1): '煤化工'
+[2025-08-12 00:45:17] 获取煤化工数据失败 (尝试 2): '煤化工'
+[2025-08-12 00:45:22] 获取煤化工数据失败 (尝试 3): '煤化工'
+[2025-08-12 00:45:24] 获取PCB数据失败 (尝试 1): 'PCB'
+[2025-08-12 00:45:29] 获取PCB数据失败 (尝试 2): 'PCB'
+[2025-08-12 00:45:35] 获取PCB数据失败 (尝试 3): 'PCB'
+[2025-08-12 00:45:37] 获取苹果数据失败 (尝试 1): '苹果'
+[2025-08-12 00:45:41] 获取苹果数据失败 (尝试 2): '苹果'
+[2025-08-12 00:45:47] 获取苹果数据失败 (尝试 3): '苹果'
+[2025-08-12 00:45:49] 获取钛白粉数据失败 (尝试 1): '钛白粉'
+[2025-08-12 00:45:53] 获取钛白粉数据失败 (尝试 2): '钛白粉'
+[2025-08-12 00:45:58] 获取钛白粉数据失败 (尝试 3): '钛白粉'
+[2025-08-12 00:46:00] 获取特钢数据失败 (尝试 1): '特钢'
+[2025-08-12 00:46:04] 获取特钢数据失败 (尝试 2): '特钢'
+[2025-08-12 00:46:11] 获取特钢数据失败 (尝试 3): '特钢'
+[2025-08-12 00:46:12] 获取腾讯数据失败 (尝试 1): '腾讯'
+[2025-08-12 00:46:16] 获取腾讯数据失败 (尝试 2): '腾讯'
+[2025-08-12 00:46:21] 获取腾讯数据失败 (尝试 3): '腾讯'
+[2025-08-12 00:46:23] 获取星闪数据失败 (尝试 1): '星闪'
+[2025-08-12 00:46:28] 获取星闪数据失败 (尝试 2): '星闪'
+[2025-08-12 00:46:33] 获取星闪数据失败 (尝试 3): '星闪'
+[2025-08-12 00:47:10] 获取轨交设备数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:47:25] 获取煤炭开采加工数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:48:03] 获取参股保险数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:49:07] 获取柔性屏数据失败 (尝试 1): '柔性屏'
+[2025-08-12 00:49:11] 获取柔性屏数据失败 (尝试 2): '柔性屏'
+[2025-08-12 00:49:16] 获取柔性屏数据失败 (尝试 3): '柔性屏'
+[2025-08-12 00:49:23] 获取Sora概念数据失败 (尝试 1): 'Sora概念'
+[2025-08-12 00:49:28] 获取Sora概念数据失败 (尝试 2): 'Sora概念'
+[2025-08-12 00:49:34] 获取Sora概念数据失败 (尝试 3): 'Sora概念'
+[2025-08-12 00:49:54] 获取天然气数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-12 00:50:36] 获取宁德时代数据失败 (尝试 1): '宁德时代'
+[2025-08-12 00:50:40] 获取宁德时代数据失败 (尝试 2): '宁德时代'
+[2025-08-12 00:50:46] 获取宁德时代数据失败 (尝试 3): '宁德时代'
+[2025-08-12 00:50:48] 获取氟化工数据失败 (尝试 1): '氟化工'
+[2025-08-12 00:50:53] 获取氟化工数据失败 (尝试 2): '氟化工'
+[2025-08-12 00:50:59] 获取氟化工数据失败 (尝试 3): '氟化工'
+[2025-08-12 00:51:01] 获取黄金数据失败 (尝试 1): '黄金'
+[2025-08-12 00:51:05] 获取黄金数据失败 (尝试 2): '黄金'
+[2025-08-12 00:51:12] 获取黄金数据失败 (尝试 3): '黄金'
+[2025-08-12 00:51:14] 获取旅游数据失败 (尝试 1): '旅游'
+[2025-08-12 00:51:18] 获取旅游数据失败 (尝试 2): '旅游'
+[2025-08-12 00:51:23] 获取旅游数据失败 (尝试 3): '旅游'
+[2025-08-12 00:51:26] 获取煤化工数据失败 (尝试 1): '煤化工'
+[2025-08-12 00:51:31] 获取煤化工数据失败 (尝试 2): '煤化工'
+[2025-08-12 00:51:37] 获取煤化工数据失败 (尝试 3): '煤化工'
+[2025-08-12 00:51:39] 获取PCB数据失败 (尝试 1): 'PCB'
+[2025-08-12 00:51:43] 获取PCB数据失败 (尝试 2): 'PCB'
+[2025-08-12 00:51:49] 获取PCB数据失败 (尝试 3): 'PCB'
+[2025-08-12 00:51:51] 获取苹果数据失败 (尝试 1): '苹果'
+[2025-08-12 00:51:54] 获取苹果数据失败 (尝试 2): '苹果'
+[2025-08-12 00:52:00] 获取苹果数据失败 (尝试 3): '苹果'
+[2025-08-12 00:52:01] 获取钛白粉数据失败 (尝试 1): '钛白粉'
+[2025-08-12 00:52:06] 获取钛白粉数据失败 (尝试 2): '钛白粉'
+[2025-08-12 00:52:13] 获取钛白粉数据失败 (尝试 3): '钛白粉'
+[2025-08-12 00:52:15] 获取特钢数据失败 (尝试 1): '特钢'
+[2025-08-12 00:52:20] 获取特钢数据失败 (尝试 2): '特钢'
+[2025-08-12 00:52:26] 获取特钢数据失败 (尝试 3): '特钢'
+[2025-08-12 00:52:29] 获取腾讯数据失败 (尝试 1): '腾讯'
+[2025-08-12 00:52:33] 获取腾讯数据失败 (尝试 2): '腾讯'
+[2025-08-12 00:52:39] 获取腾讯数据失败 (尝试 3): '腾讯'
+[2025-08-12 00:52:40] 获取星闪数据失败 (尝试 1): '星闪'
+[2025-08-12 00:52:45] 获取星闪数据失败 (尝试 2): '星闪'
+[2025-08-12 00:52:50] 获取星闪数据失败 (尝试 3): '星闪'
+[2025-08-14 22:29:15] 获取电力数据失败 (尝试 1): HTTPSConnectionPool(host='d.10jqka.com.cn', port=443): Max retries exceeded with url: /v4/line/bk_881145/01/2025.js (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x0000012C5D5366E0>, 'Connection to d.10jqka.com.cn timed out. (connect timeout=None)'))
+[2025-08-14 22:34:28] 获取共享单车数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-19 22:15:54] 获取固态电池数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-19 22:15:59] 获取固态电池数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-08-29 22:17:11] 获取短剧游戏数据失败 (尝试 1): ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 10054, None))
+[2025-09-02 21:52:50] 获取两轮车数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-02 21:52:56] 获取两轮车数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-02 21:57:08] 获取华为数字能源数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:35:50] 获取AI语料数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:35:55] 获取AI语料数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:36:03] 获取AI语料数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:38:08] 获取华为鲲鹏数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:38:13] 获取华为鲲鹏数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:38:51] 获取空气能热泵数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:38:56] 获取空气能热泵数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:39:03] 获取空气能热泵数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:39:08] 获取冷链物流数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:39:25] 获取蚂蚁金服概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:39:29] 获取蚂蚁金服概念数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:40:02] 获取汽车热管理数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:41:31] 获取文化传媒概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:41:41] 获取无人驾驶数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:41:46] 获取无人驾驶数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:42:58] 获取云游戏数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-04 18:43:11] 获取智慧城市数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:03:22] 获取燃气数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:03:27] 获取燃气数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:07:06] 获取MiniLED数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:07:10] 获取MiniLED数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:09:45] 获取信托概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:09:49] 获取信托概念数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:10:11] 获取养鸡数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:10:15] 获取养鸡数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-12 22:10:21] 获取养鸡数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:25:07] 获取长三角一体化数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:25:12] 获取长三角一体化数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:26:07] 获取高股息精选数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:27:25] 获取金属铅数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:28:41] 获取人形机器人数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:29:25] 获取数字孪生数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:29:30] 获取数字孪生数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:29:36] 获取数字孪生数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:29:39] 获取Sora概念(文生视频)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:30:01] 获取同花顺漂亮100数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:30:39] 获取小米汽车数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:30:57] 获取新型城镇化数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:31:48] 获取中俄贸易概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:31:52] 获取中俄贸易概念数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:31:59] 获取中俄贸易概念数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:12] 获取6G概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:19] 获取雅下水电概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:26] 获取中国AI 50数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:31] 获取中国AI 50数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:37] 获取中国AI 50数据失败 (尝试 3): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:40] 获取DeepSeek概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:47] 获取小红书概念数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:52] 获取同花顺新质50数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:32:59] 获取IP经济(谷子经济)数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:33:08] 获取房屋检测数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:33:21] 获取财税数字化数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-15 22:33:27] 获取财税数字化数据失败 (尝试 2): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-16 22:05:29] 获取POE胶膜数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-09-16 22:09:04] 获取AI眼镜数据失败 (尝试 1): Length mismatch: Expected axis has 0 elements, new values have 12 elements
+[2025-10-21 07:50:05] 获取烟草数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308560 (Caused by ConnectTimeoutError(<urllib3.connection.HTTPSConnection object at 0x00000143B9D025F0>, 'Connection to q.10jqka.com.cn timed out. (connect timeout=None)'))
+[2025-10-21 07:50:09] 获取烟草数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308560 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02770>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:50:27] 获取烟草数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308560 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01A20>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:50:38] 获取养鸡数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301576 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00CA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:50:42] 获取养鸡数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301576 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00D60>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:50:58] 获取养鸡数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301576 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03F70>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:10] 获取养老概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301494 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0FD0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:24] 获取养老概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301494 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03580>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:30] 获取养老概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301494 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02350>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:30] 获取央企国企改革数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301546 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01C60>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:35] 获取央企国企改革数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301546 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9C86A10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:41] 获取央企国企改革数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301546 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00580>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:41] 获取盐湖提锂数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/307904 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00A60>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:44] 获取盐湖提锂数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/307904 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D023B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:52] 获取盐湖提锂数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/307904 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03760>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:52] 获取眼科医疗数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301252 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1BD0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:51:57] 获取眼科医疗数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301252 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2560>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:04] 获取眼科医疗数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301252 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D032E0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:04] 获取液冷服务器数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309061 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00520>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:08] 获取液冷服务器数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309061 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D005E0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:15] 获取液冷服务器数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309061 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00C10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:15] 获取页岩气数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300402 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D025F0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:19] 获取页岩气数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300402 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02470>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:26] 获取页岩气数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300402 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00100>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:26] 获取一带一路数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301365 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03940>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:40] 获取一带一路数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301365 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0D30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:46] 获取一带一路数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301365 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0DC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:46] 获取移动支付数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300188 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D007F0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:52:49] 获取移动支付数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300188 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00190>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:00] 获取移动支付数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300188 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01810>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:00] 获取医疗废物处理数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308638 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01C30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:04] 获取医疗废物处理数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308638 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0DF0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:11] 获取医疗废物处理数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308638 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03250>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:11] 获取医美概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308712 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01180>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:16] 获取医美概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308712 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01BA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:22] 获取医美概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308712 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01C00>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:22] 获取英伟达概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309065 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1BD0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:27] 获取英伟达概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309065 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03D30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:34] 获取英伟达概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309065 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02350>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:34] 获取一体化压铸数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308984 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D021A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:37] 获取一体化压铸数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308984 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01D80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:45] 获取一体化压铸数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308984 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB13C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:45] 获取医疗器械概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301505 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01210>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:49] 获取医疗器械概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301505 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00BB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:56] 获取医疗器械概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301505 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00640>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:53:56] 获取有机硅概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301279 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00F40>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:00] 获取有机硅概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301279 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02B30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:17] 获取有机硅概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301279 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01510>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:17] 获取幽门螺杆菌概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308818 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01600>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:21] 获取幽门螺杆菌概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308818 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03700>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:28] 获取幽门螺杆菌概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308818 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D028C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:28] 获取元宇宙数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308752 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01660>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:33] 获取元宇宙数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308752 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02950>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:44] 获取元宇宙数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308752 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03550>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:44] 获取粤港澳大湾区数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301491 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D011E0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:48] 获取粤港澳大湾区数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301491 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03850>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:54] 获取粤港澳大湾区数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301491 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB15D0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:54] 获取玉米数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301572 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01300>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:54:57] 获取玉米数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301572 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D009A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:08] 获取玉米数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301572 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03B20>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:08] 获取云办公数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308634 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00B50>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:12] 获取云办公数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308634 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2680>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:18] 获取云办公数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308634 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00670>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:18] 获取云计算数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300419 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02DD0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:22] 获取云计算数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300419 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01BA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:40] 获取云计算数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300419 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D033A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:40] 获取云游戏数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308624 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0DC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:44] 获取云游戏数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308624 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02E90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:55] 获取云游戏数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308624 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D023B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:55] 获取语音技术数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300917 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01FF0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:55:58] 获取语音技术数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300917 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D027D0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:05] 获取语音技术数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300917 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1A80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:05] 获取预制菜数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308814 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01C30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:09] 获取预制菜数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308814 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01E70>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:27] 获取预制菜数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308814 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01960>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:27] 获取医药电商数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301565 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01240>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:30] 获取医药电商数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301565 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2410>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:37] 获取医药电商数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301565 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02BF0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:37] 获取在线教育数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301227 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02500>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:48] 获取在线教育数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301227 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D015A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:55] 获取在线教育数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301227 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D028C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:56:55] 获取中船系数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301713 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D039D0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:00] 获取中船系数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301713 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00A90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:06] 获取中船系数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301713 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D009A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:06] 获取化债概念(AMC概念)数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302046 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00250>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:09] 获取化债概念(AMC概念)数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302046 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0EE0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:14] 获取化债概念(AMC概念)数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302046 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1180>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:14] 获取智慧城市数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300642 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01810>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:18] 获取智慧城市数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300642 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D036D0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:23] 获取智慧城市数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300642 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D005E0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:23] 获取智慧灯杆数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308841 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00FA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:39] 获取智慧灯杆数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308841 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1AB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:44] 获取智慧灯杆数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308841 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D010C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:44] 获取智慧政务数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308606 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00E20>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:48] 获取智慧政务数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308606 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03DF0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:53] 获取智慧政务数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308606 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02E90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:53] 获取智能穿戴数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301175 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2680>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:57:57] 获取智能穿戴数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301175 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D018A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:14] 获取智能穿戴数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301175 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D009A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:14] 获取智能电网数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300037 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03400>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:17] 获取智能电网数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300037 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D022F0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:24] 获取智能电网数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300037 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1C30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:24] 获取智能家居数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300920 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00E80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:39] 获取智能家居数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300920 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02FB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:55] 获取智能家居数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300920 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02440>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:58:55] 获取智能物流数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301797 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D012A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:00] 获取智能物流数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301797 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02A10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:06] 获取智能物流数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301797 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00400>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:06] 获取智能医疗数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300682 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02230>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:20] 获取智能医疗数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300682 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03460>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:37] 获取智能医疗数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300682 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1630>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:37] 获取智能音箱数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302131 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0D60>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:41] 获取智能音箱数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302131 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03C10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:47] 获取智能音箱数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302131 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01000>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:47] 获取智能座舱数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309092 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01F00>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 07:59:52] 获取智能座舱数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309092 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03FA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:03] 获取智能座舱数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309092 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2650>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:03] 获取知识产权保护数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308172 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D033A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:07] 获取知识产权保护数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308172 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03550>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:12] 获取知识产权保护数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308172 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00CD0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:12] 获取职业教育数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301539 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02F80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:16] 获取职业教育数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301539 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0F40>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:21] 获取职业教育数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301539 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00FA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:21] 获取中俄贸易概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308854 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02530>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:36] 获取中俄贸易概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308854 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D027D0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:41] 获取中俄贸易概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308854 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03F70>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:41] 获取中韩自贸区数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301541 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2350>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:46] 获取中韩自贸区数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301541 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D027A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:52] 获取中韩自贸区数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301541 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00490>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:52] 获取中芯国际概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308690 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02D10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:00:56] 获取中芯国际概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308690 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02950>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:03] 获取中芯国际概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308690 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0EE0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:03] 获取中字头股票数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300704 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D022F0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:14] 获取中字头股票数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300704 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01C90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:20] 获取中字头股票数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300704 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01F60>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:20] 获取专精特新数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308740 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02980>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:24] 获取专精特新数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308740 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02F20>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:31] 获取专精特新数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308740 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03910>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:31] 获取转基因数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300435 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D031C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:35] 获取转基因数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300435 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D007C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:42] 获取转基因数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300435 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0D60>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:42] 获取注册制次新股数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308697 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0B50>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:45] 获取注册制次新股数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308697 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D001C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:56] 获取注册制次新股数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/308697 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00E80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:01:56] 获取猪肉数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300451 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03430>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:00] 获取猪肉数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300451 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D006A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:06] 获取猪肉数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300451 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2560>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:06] 获取证金持股数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301715 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03DC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:11] 获取证金持股数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301715 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03C70>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:17] 获取证金持股数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301715 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03190>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:17] 获取摘帽数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301455 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00160>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:20] 获取摘帽数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301455 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1AB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:31] 获取摘帽数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301455 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01840>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:31] 获取装配式建筑数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/305794 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02950>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:36] 获取装配式建筑数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/305794 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01450>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:43] 获取装配式建筑数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/305794 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03310>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:43] 获取足球概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301100 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03DC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:48] 获取足球概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301100 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00670>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:54] 获取足球概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/301100 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00E80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:54] 获取租售同权数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302034 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03220>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:02:57] 获取租售同权数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302034 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02D10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:05] 获取租售同权数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/302034 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02710>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:05] 获取自由贸易港数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/306398 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00730>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:09] 获取自由贸易港数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/306398 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03790>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:15] 获取自由贸易港数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/306398 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02D40>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:15] 获取3D打印数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300127 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00580>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:18] 获取3D打印数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300127 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB23B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:35] 获取3D打印数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300127 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03D00>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:35] 获取5G数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300843 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D028C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:39] 获取5G数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300843 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00FA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:56] 获取5G数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/300843 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00700>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:03:56] 获取6G概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309055 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1180>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:00] 获取6G概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309055 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D032E0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:06] 获取6G概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309055 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D038B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:06] 获取2025三季报预增数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309262 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02230>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:10] 获取2025三季报预增数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309262 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02830>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:16] 获取2025三季报预增数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309262 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0B50>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:16] 获取雅下水电概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309261 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02F80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:20] 获取雅下水电概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309261 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D033A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:31] 获取雅下水电概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309261 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03D90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:31] 获取2025中报预增数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309260 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02B90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:35] 获取2025中报预增数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309260 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02560>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:41] 获取2025中报预增数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309260 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01930>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:41] 获取中国AI 50数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309187 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D013C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:46] 获取中国AI 50数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309187 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01EA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:57] 获取中国AI 50数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309187 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2410>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:04:57] 获取兵装重组概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309185 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2470>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:02] 获取兵装重组概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309185 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D026B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:09] 获取兵装重组概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309185 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03A90>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:09] 获取DeepSeek概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309184 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02AA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:13] 获取DeepSeek概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309184 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03310>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:19] 获取DeepSeek概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309184 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03220>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:19] 获取AI智能体数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309183 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D032B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:23] 获取AI智能体数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309183 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01DB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:34] 获取AI智能体数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309183 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01F00>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:34] 获取小红书概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309182 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB25C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:38] 获取小红书概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309182 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0B80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:45] 获取小红书概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309182 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01EA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:45] 获取同花顺新质50数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309177 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D038B0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:48] 获取同花顺新质50数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309177 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00FA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:56] 获取同花顺新质50数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309177 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01D50>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:05:56] 获取IP经济(谷子经济)数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309174 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D012A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:00] 获取IP经济(谷子经济)数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309174 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01B10>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:07] 获取IP经济(谷子经济)数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309174 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02170>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:07] 获取华为盘古数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309170 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01720>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:12] 获取华为盘古数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309170 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9C84700>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:17] 获取华为盘古数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309170 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0D30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:17] 获取华为数字能源数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309169 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01390>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:21] 获取华为数字能源数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309169 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D013C0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:28] 获取华为数字能源数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309169 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D022F0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:28] 获取华为手机数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309167 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02650>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:31] 获取华为手机数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309167 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB2350>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:42] 获取华为手机数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309167 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01AE0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:43] 获取智谱AI数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309164 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D000A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:47] 获取智谱AI数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309164 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00D30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:53] 获取智谱AI数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309164 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00550>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:53] 获取回购增持再贷款概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309163 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB0AF0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:06:57] 获取回购增持再贷款概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309163 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01FC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:03] 获取回购增持再贷款概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309163 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03CA0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:03] 获取房屋检测数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309155 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02C50>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:08] 获取房屋检测数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309155 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02BC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:13] 获取房屋检测数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309155 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1630>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:13] 获取西部大开发数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309154 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02B30>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:24] 获取西部大开发数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309154 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02230>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:31] 获取西部大开发数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309154 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01510>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:31] 获取AI眼镜数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309152 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02D70>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:36] 获取AI眼镜数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309152 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00460>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:47] 获取AI眼镜数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309152 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00190>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:47] 获取光纤概念数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309151 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00430>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:50] 获取光纤概念数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309151 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D03DF0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:56] 获取光纤概念数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309151 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1AB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:07:56] 获取同花顺果指数数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309136 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02710>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:00] 获取同花顺果指数数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309136 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D00B80>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:17] 获取同花顺果指数数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309136 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01600>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:17] 获取维生素数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309135 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01FC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:22] 获取维生素数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309135 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9CB1AB0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:29] 获取维生素数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309135 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D02590>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:29] 获取财税数字化数据失败 (尝试 1): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309134 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01B70>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:32] 获取财税数字化数据失败 (尝试 2): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309134 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D01CC0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-21 08:08:38] 获取财税数字化数据失败 (尝试 3): HTTPSConnectionPool(host='q.10jqka.com.cn', port=443): Max retries exceeded with url: /gn/detail/code/309134 (Caused by NameResolutionError("<urllib3.connection.HTTPSConnection object at 0x00000143B9D024A0>: Failed to resolve 'q.10jqka.com.cn' ([Errno 11001] getaddrinfo failed)"))
+[2025-10-23 23:16:53] 获取玉米数据失败 (尝试 1): ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 10054, None))
+[2025-10-23 23:17:03] 获取玉米数据失败 (尝试 2): ('Connection aborted.', ConnectionResetError(10054, '远程主机强迫关闭了一个现有的连接。', None, 10054, None))
