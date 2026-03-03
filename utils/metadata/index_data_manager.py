@@ -189,8 +189,16 @@ class IndexMetadataManager:
             if end_date is None:
                 end_date = datetime.now().strftime("%Y%m%d")
 
-            end_date_dt = datetime.strptime(end_date, "%Y%m%d")
-            start_date = (end_date_dt - timedelta(days=30)).strftime("%Y%m%d")
+            # 仅在未显式传入 start_date 时，默认回看 30 天
+            if start_date is None:
+                end_date_dt = datetime.strptime(end_date, "%Y%m%d")
+                start_date = (end_date_dt - timedelta(days=30)).strftime("%Y%m%d")
+            else:
+                # 兼容传入 YYYY-MM-DD
+                if isinstance(start_date, str) and len(start_date) == 10 and "-" in start_date:
+                    start_date = start_date.replace("-", "")
+            if isinstance(end_date, str) and len(end_date) == 10 and "-" in end_date:
+                end_date = end_date.replace("-", "")
             all_index_data = []
 
             for i, index_info in enumerate(index_list):

@@ -833,6 +833,7 @@ class EastmoneyDataProvider:
             import traceback
             traceback.print_exc()
             return False
+
 class SectorDataManager:
     """板块数据管理器 - 专注于加载本地数据、协调更新、提供数据接口"""
     def __init__(self, data_dir: str = "data_cache", preferred_source: str = "ths"):

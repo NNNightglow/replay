@@ -711,10 +711,31 @@ class StockMetadataManager:
         #### 获取所有A股历史K线数据 ####
         all_data = []
         failed_stocks = []
-        i=0
+        total_a_stocks = len(a_stocks)
+        processed_count = 0
+        success_count = 0
+        empty_count = 0
+        failed_count = 0
+        error_reason_counter: Dict[str, int] = {}
+        empty_stock_examples: List[Tuple[str, str]] = []
+        late_listing_count = 0
+        late_listing_examples: List[Tuple[str, str, str]] = []
+        total_elapsed_seconds = 0.0
+        progress_interval = 100 if total_a_stocks >= 1000 else 20
+        batch_pause_every = 100
+        batch_pause_seconds = 0.1
+        loop_start_ts = time.perf_counter()
+
+        print(
+            f"📌 沪深市场拉取任务: {total_a_stocks} 只股票, 日期区间 {start_date} -> {end_date}, "
+            f"每{batch_pause_every}只暂停{batch_pause_seconds:.1f}s"
+        )
+
         for index, stock in a_stocks.iterrows():
             stock_code = stock['code']
             stock_name = stock['code_name']
+            stock_start_ts = time.perf_counter()
+            row_count = 0
             
             try:
                 #print(f"正在获取 {stock_code} {stock_name} 的数据...")
@@ -725,8 +746,12 @@ class StockMetadataManager:
                     frequency="d", adjustflag="2")
                 
                 if rs.error_code != '0':
-                    print(f"获取 {stock_code} 数据失败: {rs.error_msg}")
+                    reason = f"{rs.error_code}:{rs.error_msg}" if rs.error_msg else f"{rs.error_code}:unknown"
+                    failed_count += 1
+                    error_reason_counter[reason] = error_reason_counter.get(reason, 0) + 1
                     failed_stocks.append((stock_code, stock_name))
+                    if failed_count <= 5 or failed_count % 50 == 0:
+                        print(f"⚠️ 获取 {stock_code} {stock_name} 数据失败: {reason} (累计失败 {failed_count})")
                     continue
                     
                 # 获取数据
@@ -739,16 +764,73 @@ class StockMetadataManager:
                     # 添加股票名称列
                     temp_df['名称'] = stock_name
                     all_data.append(temp_df)
-                    i+=1
-                    if i%100==0:
-                        print(f"获取到{i}/{len(stock_rs)}只股票")
-                        # 添加延时，避免请求过快
-                        time.sleep(0.1)
+                    success_count += 1
+                    row_count = len(data_list)
+
+                    first_trade_date = data_list[0][0] if data_list[0] else None
+                    if first_trade_date and first_trade_date > start_date:
+                        late_listing_count += 1
+                        if len(late_listing_examples) < 10:
+                            late_listing_examples.append((stock_code, stock_name, first_trade_date))
+                else:
+                    empty_count += 1
+                    if len(empty_stock_examples) < 10:
+                        empty_stock_examples.append((stock_code, stock_name))
                 
             except Exception as e:
-                print(f"处理 {stock_code} {stock_name} 时出错: {str(e)}")
+                failed_count += 1
+                reason = f"exception:{str(e)}"
+                error_reason_counter[reason] = error_reason_counter.get(reason, 0) + 1
                 failed_stocks.append((stock_code, stock_name))
+                if failed_count <= 5 or failed_count % 50 == 0:
+                    print(f"⚠️ 处理 {stock_code} {stock_name} 时出错: {str(e)} (累计失败 {failed_count})")
                 continue
+            finally:
+                processed_count += 1
+                stock_elapsed = time.perf_counter() - stock_start_ts
+                total_elapsed_seconds += stock_elapsed
+
+
+                if processed_count % progress_interval == 0 or processed_count == total_a_stocks:
+                    avg_elapsed = total_elapsed_seconds / processed_count if processed_count else 0.0
+                    eta_seconds = avg_elapsed * max(total_a_stocks - processed_count, 0)
+                    wall_seconds = time.perf_counter() - loop_start_ts
+                    print(
+                        f"📈 沪深市场进度 {processed_count}/{total_a_stocks} | 成功:{success_count} "
+                        f"空数据:{empty_count} 失败:{failed_count} | 平均:{avg_elapsed:.2f}s/只 "
+                        f"| 已用:{wall_seconds / 60:.1f}m 预计剩余:{eta_seconds / 60:.1f}m"
+                    )
+
+                # 节流：仅在每处理完100只后短暂休息，避免每只股票都等待
+                if (
+                    processed_count % batch_pause_every == 0
+                    and processed_count < total_a_stocks
+                ):
+                    time.sleep(batch_pause_seconds)
+
+        mainboard_wall_seconds = time.perf_counter() - loop_start_ts
+        print(
+            f"✅ 沪深市场拉取完成: 处理 {processed_count} 只, 成功 {success_count} 只, "
+            f"空数据 {empty_count} 只, 失败 {failed_count} 只, 总耗时 {mainboard_wall_seconds / 60:.1f} 分钟"
+        )
+
+        if late_listing_count > 0:
+            print(
+                f"ℹ️ 有 {late_listing_count} 只股票首个交易日晚于起始日期 {start_date}，"
+                "这通常是上市较晚，不属于接口报错。"
+            )
+            if late_listing_examples:
+                late_sample = "，".join(
+                    [f"{code}({name})首日={first_date}" for code, name, first_date in late_listing_examples[:5]]
+                )
+                print(f"   上市较晚样本: {late_sample}")
+        else:
+            print(f"ℹ️ 未发现首个交易日晚于 {start_date} 的主板样本。")
+
+        if empty_count > 0 and empty_stock_examples:
+            empty_sample = "，".join([f"{code}({name})" for code, name in empty_stock_examples[:5]])
+            print(f"ℹ️ 空数据样本: {empty_sample}")
+
         
         # 获取所有股票列表（获取北交所股票数据）
         print('正在获取股票列表信息...')

@@ -2558,6 +2558,7 @@ watch([activeStrategyId, activeMode], () => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  overflow: hidden;
 }
 
 .page-header {
@@ -2597,6 +2598,7 @@ watch([activeStrategyId, activeMode], () => {
   grid-template-columns: 340px 1fr;
   gap: 14px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .left-panel {
@@ -2642,6 +2644,7 @@ watch([activeStrategyId, activeMode], () => {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  overflow: hidden;
 }
 
 .card-header {
@@ -2659,6 +2662,7 @@ watch([activeStrategyId, activeMode], () => {
 .conversation-list,
 .resource-list,
 .job-list {
+  flex: 1;
   overflow: auto;
   min-height: 0;
 }
@@ -2827,6 +2831,7 @@ watch([activeStrategyId, activeMode], () => {
 .chat-panel,
 .chat-card {
   height: 100%;
+  min-height: 0;
 }
 
 .chat-card :deep(.el-card__body) {
@@ -2834,11 +2839,13 @@ watch([activeStrategyId, activeMode], () => {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: hidden;
 }
 
 .messages-wrap {
   flex: 1;
   overflow: auto;
+  min-height: 0;
   border: 1px solid #ebedf1;
   border-radius: 12px;
   background: #fafcff;
@@ -3050,6 +3057,7 @@ watch([activeStrategyId, activeMode], () => {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  flex-shrink: 0;
 }
 
 .composer-tools {

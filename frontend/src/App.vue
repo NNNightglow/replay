@@ -108,7 +108,7 @@
         </el-button>
       </el-aside>
 
-      <el-main class="app-main">
+      <el-main class="app-main" :class="{ 'app-main-no-scroll': route.path === '/strategy-watch' }">
         <router-view />
       </el-main>
     </el-container>
@@ -184,6 +184,7 @@ export default {
     }
 
     return {
+      route,
       manualUpdateOptions,
       updatingStatus,
       isAnyUpdating,
@@ -364,6 +365,10 @@ export default {
   background-color: #f0f2f5;
   padding: 20px;
   overflow-y: auto;
+}
+
+.app-main.app-main-no-scroll {
+  overflow: hidden;
 }
 
 @media (max-width: 768px) {

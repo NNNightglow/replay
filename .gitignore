@@ -6,16 +6,19 @@ frontend\dist
 
 # Python caches
 __pycache__/
-utils/__pycache__/
 
 #test
 test/
+key_level.ipynb
+paper
+scripts/
 
 # Large data files
 data_cache
 .env
 .cursor
 .npm-cache
+.ipynb_checkpoints
 
 # Unused local skills (not referenced by runtime)
 skills/plan-and-task/
