@@ -195,6 +195,7 @@ def _build_rewrite_prompt(paragraph: str) -> str:
         "4) 不缩短真实内容，不删事实与观点。\n"
         "5) 允许轻微句式调整、断句、补标点。\n"
         "6) 只输出重写后的该段文字，不要额外说明。\n"
+        "7) 修正明显错别字，若不确定保持原词。\n"
     )
     return rules + "\n待重写段落：\n" + paragraph.strip()
 

@@ -77,6 +77,23 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _safe_markdown_stem(filename: str) -> str:
+    stem = Path(filename or "").stem.strip()
+    if not stem:
+        return "file"
+    # Windows-invalid chars and control chars
+    stem = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1F]', "_", stem)
+    stem = stem.strip(" .")
+    if not stem:
+        return "file"
+    return stem[:80]
+
+
+def _markdown_filename(resource_id: str, original_name: str) -> str:
+    safe_stem = _safe_markdown_stem(original_name)
+    return f"{safe_stem}__{resource_id}.md"
+
+
 def _compose_user_content_with_prompt_template(user_content: str, prompt_template: str) -> str:
     content = (user_content or "").strip()
     template = (prompt_template or "").strip()
@@ -855,7 +872,7 @@ def _copy_resource_record(item: Dict, target_group_id: str, target_name: str) ->
     if markdown_rel:
         src_md = (BASE_DIR / markdown_rel).resolve()
         if src_md.exists() and src_md.is_file():
-            dst_md = (MARKDOWN_DIR / f"{new_id}.md").resolve()
+            dst_md = (MARKDOWN_DIR / _markdown_filename(new_id, original_name)).resolve()
             dst_md.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(src_md, dst_md)
             new_markdown_rel = dst_md.relative_to(BASE_DIR).as_posix()
@@ -973,7 +990,7 @@ def upload_strategy_resources():
             safe_stem = secure_filename(Path(original_name).stem) or "file"
             stored_name = f"{rid}_{safe_stem}{ext}"
             upload_path = UPLOAD_DIR / stored_name
-            markdown_path = MARKDOWN_DIR / f"{rid}.md"
+            markdown_path = MARKDOWN_DIR / _markdown_filename(rid, original_name)
 
             file_storage.save(upload_path)
 
@@ -1277,7 +1294,7 @@ def transfer_strategy_resource_group():
                 if markdown_rel:
                     src_md = (BASE_DIR / markdown_rel).resolve()
                     if src_md.exists() and src_md.is_file():
-                        dst_md = (MARKDOWN_DIR / f"{new_id}.md").resolve()
+                        dst_md = (MARKDOWN_DIR / _markdown_filename(new_id, original_name)).resolve()
                         dst_md.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copyfile(src_md, dst_md)
                         new_markdown_rel = dst_md.relative_to(BASE_DIR).as_posix()

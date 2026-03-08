@@ -7,7 +7,7 @@
           <span class="title">股票分析系统</span>
           <el-tag type="success" size="small">Vue + Flask</el-tag>
         </div>
-        <div class="header-info">模块化 · 高性能 · 可扩展</div>
+        <div class="header-info">股票是一种艺术</div>
         <div class="header-actions">
           <el-dropdown trigger="click" @command="handleManualUpdate">
             <span class="settings-trigger" :class="{ 'is-updating': isAnyUpdating }">

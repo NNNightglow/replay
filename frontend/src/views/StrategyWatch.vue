@@ -1728,21 +1728,32 @@ const pollJobsOnce = async () => {
   }
   const jobIds = [...uploadJobs.value]
   try {
-    const results = await Promise.all(
-      jobIds.map(id =>
-        ApiService.getStrategyResourceJob(id)
-          .then(res => ({ id, job: res.data }))
-          .catch(() => null)
-      )
-    )
-    const done = new Set()
-    results.forEach(item => {
-      if (!item?.job) return
-      const status = item.job.status
-      if (status && status !== 'queued' && status !== 'running') {
-        done.add(item.id)
+  const results = await Promise.all(
+    jobIds.map(async id => {
+      try {
+        const res = await ApiService.getStrategyResourceJob(id)
+        return { id, job: res.data }
+      } catch (error) {
+        const status = error?.response?.status
+        if (status === 404) {
+          return { id, missing: true }
+        }
+        return { id, error: true }
       }
     })
+  )
+  const done = new Set()
+  results.forEach(item => {
+    if (!item) return
+    if (item.missing) {
+      done.add(item.id)
+      return
+    }
+    const status = item.job?.status
+    if (!status || (status !== 'queued' && status !== 'running')) {
+      done.add(item.id)
+    }
+  })
     await loadResources()
     await loadJobs()
     uploadJobs.value = uploadJobs.value.filter(id => !done.has(id))
