@@ -12,6 +12,8 @@ test/
 key_level.ipynb
 paper
 scripts/
+!skills/multiformat-to-md/scripts/
+!skills/multiformat-to-md/scripts/*.py
 
 # Large data files
 data_cache
