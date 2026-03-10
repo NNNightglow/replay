@@ -36,9 +36,34 @@ class IndexMetadataManager:
         self.metadata_path.parent.mkdir(parents=True, exist_ok=True)
         
         self.minute_metadata_path = Path("data_cache/indices/index_minute_metadata.parquet")
+        self._bs_logged_in = False
 
         print("指数元数据管理器初始化完成")
     
+    def _ensure_baostock_login(self) -> bool:
+        if self._bs_logged_in:
+            return True
+        try:
+            lg = bs.login()
+            if lg.error_code == '0':
+                self._bs_logged_in = True
+                return True
+            print(f"[] baostock login failed: {lg.error_msg}")
+            return False
+        except Exception as e:
+            print(f"[] baostock login exception: {e}")
+            return False
+
+    def _baostock_logout(self) -> None:
+        if not self._bs_logged_in:
+            return
+        try:
+            bs.logout()
+        except Exception:
+            pass
+        finally:
+            self._bs_logged_in = False
+
     def load_metadata(self) -> Optional[pl.DataFrame]:
         """从本地 Parquet 加载指数元数据。"""
         if not os.path.exists(self.metadata_path):
@@ -92,7 +117,78 @@ class IndexMetadataManager:
 
         if not all_filled:
             return None
-        return pl.concat(all_filled, how="vertical")
+        return pl.concat(all_filled, how="vertical_relaxed")
+
+    def _normalize_existing_metadata_schema(self, df: Optional[pl.DataFrame]) -> Optional[pl.DataFrame]:
+        """Normalize legacy/heterogeneous index metadata schema before concat."""
+        if df is None or df.is_empty():
+            return df
+
+        date_col = "鏃ユ湡"
+        open_col = "寮€鐩?"
+        close_col = "鏀剁洏"
+        high_col = "鏈€楂?"
+        low_col = "鏈€浣?"
+        volume_col = "鎴愪氦閲?"
+        amount_col = "鎴愪氦棰?"
+        code_col = "浠ｇ爜"
+        name_col = "鍚嶇О"
+        exchange_col = "浜ゆ槗鎵€"
+
+        rename_map = {
+            "date": date_col,
+            "open": open_col,
+            "close": close_col,
+            "high": high_col,
+            "low": low_col,
+            "volume": volume_col,
+            "amount": amount_col,
+            "code": code_col,
+            "name": name_col,
+            "exchange": exchange_col,
+        }
+        effective_rename = {
+            old: new
+            for old, new in rename_map.items()
+            if old in df.columns and new not in df.columns
+        }
+        if effective_rename:
+            df = df.rename(effective_rename)
+
+        required_cols = [
+            date_col,
+            open_col,
+            close_col,
+            high_col,
+            low_col,
+            volume_col,
+            amount_col,
+            code_col,
+            name_col,
+            exchange_col,
+        ]
+        missing_required = [col for col in required_cols if col not in df.columns]
+        if missing_required:
+            df = df.with_columns([pl.lit(None).alias(col) for col in missing_required])
+
+        df = df.with_columns(
+            [
+                pl.col(date_col).cast(pl.Date, strict=False),
+                pl.col(open_col).cast(pl.Float64, strict=False),
+                pl.col(close_col).cast(pl.Float64, strict=False),
+                pl.col(high_col).cast(pl.Float64, strict=False),
+                pl.col(low_col).cast(pl.Float64, strict=False),
+                pl.col(volume_col).cast(pl.Float64, strict=False),
+                pl.col(amount_col).cast(pl.Float64, strict=False),
+                pl.col(code_col).cast(pl.Utf8, strict=False).str.zfill(6),
+                pl.col(name_col).cast(pl.Utf8, strict=False),
+                pl.col(exchange_col).cast(pl.Utf8, strict=False),
+            ]
+        )
+
+        base = [c for c in required_cols if c in df.columns]
+        extras = [c for c in df.columns if c not in base]
+        return df.select(base + extras)
 
     def update_metadata(self,  start_date=None, end_date=None, progress_callback=None, fill_gaps: bool = True) -> bool:
         """更新指数元数据,并可选填补缺失交易日。"""
@@ -103,6 +199,7 @@ class IndexMetadataManager:
         pct10_col = "10日涨跌幅"
         pct20_col = "20日涨跌幅"
         try:
+            self._ensure_baostock_login()
             if progress_callback:
                 progress_callback(0, 100, "开始更新指数元数据")
 
@@ -120,7 +217,7 @@ class IndexMetadataManager:
                 {"code": "800007", "name": "微盘股"},
             ]
 
-            existing_metadata = self.load_metadata()
+            existing_metadata = self._normalize_existing_metadata_schema(self.load_metadata())
 
             if fill_gaps and existing_metadata is not None and not existing_metadata.is_empty():
                 try:
@@ -168,7 +265,7 @@ class IndexMetadataManager:
                                     gap_filled_data.append(filled)
 
                             if gap_filled_data:
-                                gap_filled_combined = pl.concat(gap_filled_data, how="vertical").unique(
+                                gap_filled_combined = pl.concat(gap_filled_data, how="vertical_relaxed").unique(
                                     subset=[date_col, code_col], keep="last"
                                 )
                                 existing_metadata = pl.concat(
@@ -214,7 +311,7 @@ class IndexMetadataManager:
             if not all_index_data:
                 return False
 
-            new_index_data = self._calculate_index_ma(pl.concat(all_index_data, how="vertical"))
+            new_index_data = self._calculate_index_ma(pl.concat(all_index_data, how="vertical_relaxed"))
             if existing_metadata is not None and not existing_metadata.is_empty():
                 ma_cols = ["MA5", "MA10", "MA20", pct5_col, pct10_col, pct20_col]
                 missing_ma_cols = [col for col in ma_cols if col not in existing_metadata.columns]
@@ -222,8 +319,12 @@ class IndexMetadataManager:
                     existing_metadata = self._calculate_index_ma(existing_metadata)
                 common_cols = [col for col in existing_metadata.columns if col in new_index_data.columns]
                 updated_metadata = (
-                    pl.concat([existing_metadata.select(common_cols), new_index_data.select(common_cols)], how="vertical")
-                    if common_cols else new_index_data
+                    pl.concat(
+                        [existing_metadata.select(common_cols), new_index_data.select(common_cols)],
+                        how="vertical_relaxed",
+                    )
+                    if common_cols
+                    else new_index_data
                 )
             else:
                 updated_metadata = new_index_data
@@ -279,6 +380,8 @@ class IndexMetadataManager:
         except Exception as e:
             print(f"更新指数元数据失败:{e}")
             return False
+        finally:
+            self._baostock_logout()
 
     def _fetch_index_with_fallback(self, index_info: Dict[str, str], start_date: str, end_date: str) -> Optional[pl.DataFrame]:
         """"""
@@ -312,9 +415,7 @@ class IndexMetadataManager:
     def _fetch_index_via_baostock(self, index_info: Dict[str, str], start_date: str, end_date: str) -> Optional[pd.DataFrame]:
         """ baostock """
         try:
-            lg = bs.login()
-            if lg.error_code != '0':
-                print(f"[] baostock {lg.error_msg}")
+            if not self._ensure_baostock_login():
                 return None
             
             code = index_info['code'].zfill(6)
@@ -350,14 +451,11 @@ class IndexMetadataManager:
             )
             
             if rs.error_code != '0':
-                bs.logout()
                 return None
             
             data_list = []
             while (rs.error_code == '0') and rs.next():
                 data_list.append(rs.get_row_data())
-            
-            bs.logout()
             
             if not data_list:
                 return None
@@ -374,10 +472,6 @@ class IndexMetadataManager:
             return df
             
         except Exception as e:
-            try:
-                bs.logout()
-            except:
-                pass
             raise e
 
     def _standardize_index_dataframe(self, df: pd.DataFrame, index_info: Dict[str, str]) -> Optional[pl.DataFrame]:
@@ -438,6 +532,40 @@ class IndexMetadataManager:
 
         if date_col in df_pl.columns and df_pl[date_col].dtype != pl.Date:
             df_pl = df_pl.with_columns(pl.col(date_col).cast(pl.Date).alias(date_col))
+
+        # Normalize to a stable schema so concat across data sources won't fail by column count mismatch.
+        required_cols = [
+            date_col,
+            open_col,
+            close_col,
+            high_col,
+            low_col,
+            volume_col,
+            amount_col,
+            code_col,
+            name_col,
+            exchange_col,
+        ]
+        missing_required = [col for col in required_cols if col not in df_pl.columns]
+        if missing_required:
+            df_pl = df_pl.with_columns([pl.lit(None).alias(col) for col in missing_required])
+        df_pl = df_pl.select(required_cols)
+
+        # Enforce canonical dtypes to avoid schema drift across incremental updates.
+        df_pl = df_pl.with_columns(
+            [
+                pl.col(date_col).cast(pl.Date, strict=False),
+                pl.col(open_col).cast(pl.Float64, strict=False),
+                pl.col(close_col).cast(pl.Float64, strict=False),
+                pl.col(high_col).cast(pl.Float64, strict=False),
+                pl.col(low_col).cast(pl.Float64, strict=False),
+                pl.col(volume_col).cast(pl.Float64, strict=False),
+                pl.col(amount_col).cast(pl.Float64, strict=False),
+                pl.col(code_col).cast(pl.Utf8, strict=False),
+                pl.col(name_col).cast(pl.Utf8, strict=False),
+                pl.col(exchange_col).cast(pl.Utf8, strict=False),
+            ]
+        )
 
         return df_pl
 
