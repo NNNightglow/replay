@@ -1664,8 +1664,9 @@ const deleteConversation = async (conversationId) => {
   }
 }
 
-const loadResources = async () => {
-  const res = await ApiService.getStrategyResources()
+const loadResources = async (silent = false) => {
+  const config = silent ? { hideLoading: true } : undefined
+  const res = await ApiService.getStrategyResources(config)
   const payload = res.data || {}
   resources.value = Array.isArray(payload) ? payload : (payload.resources || [])
   resourceGroups.value = Array.isArray(payload) ? [] : (payload.groups || [])
@@ -1700,9 +1701,10 @@ const loadResources = async () => {
   }
 }
 
-const loadJobs = async () => {
+const loadJobs = async (silent = false) => {
   try {
-    const res = await ApiService.listStrategyResourceJobs()
+    const config = silent ? { hideLoading: true } : undefined
+    const res = await ApiService.listStrategyResourceJobs(config)
     jobList.value = Array.isArray(res.data) ? res.data : (res.data || [])
   } catch (error) {
     console.error(error)
@@ -1731,7 +1733,7 @@ const pollJobsOnce = async () => {
   const results = await Promise.all(
     jobIds.map(async id => {
       try {
-        const res = await ApiService.getStrategyResourceJob(id)
+        const res = await ApiService.getStrategyResourceJob(id, { hideLoading: true })
         return { id, job: res.data }
       } catch (error) {
         const status = error?.response?.status
@@ -1754,8 +1756,8 @@ const pollJobsOnce = async () => {
       done.add(item.id)
     }
   })
-    await loadResources()
-    await loadJobs()
+    await loadResources(true)
+    await loadJobs(true)
     uploadJobs.value = uploadJobs.value.filter(id => !done.has(id))
     if (!uploadJobs.value.length) stopJobPolling()
   } catch (error) {

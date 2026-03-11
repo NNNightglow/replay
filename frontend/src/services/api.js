@@ -408,8 +408,8 @@ class ApiService {
     }
   }
 
-  static async getStrategyResources() {
-    return api.get('/api/strategy-watch/resources')
+  static async getStrategyResources(config = {}) {
+    return api.get('/api/strategy-watch/resources', config)
   }
 
   static async uploadStrategyResources(formData) {
@@ -418,12 +418,12 @@ class ApiService {
     })
   }
 
-  static async getStrategyResourceJob(jobId) {
-    return api.get(`/api/strategy-watch/resources/jobs/${jobId}`)
+  static async getStrategyResourceJob(jobId, config = {}) {
+    return api.get(`/api/strategy-watch/resources/jobs/${jobId}`, config)
   }
 
-  static async listStrategyResourceJobs() {
-    return api.get('/api/strategy-watch/resources/jobs')
+  static async listStrategyResourceJobs(config = {}) {
+    return api.get('/api/strategy-watch/resources/jobs', config)
   }
 
   static async renameStrategyResourceGroup(groupId, groupName) {

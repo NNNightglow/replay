@@ -82,7 +82,7 @@ def _safe_markdown_stem(filename: str) -> str:
     if not stem:
         return "file"
     # Windows-invalid chars and control chars
-    stem = re.sub(r'[<>:"/\\\\|?*\\x00-\\x1F]', "_", stem)
+    stem = re.sub('[<>:"/\\\\|?*\\x00-\\x1F]', "_", stem)
     stem = stem.strip(" .")
     if not stem:
         return "file"
