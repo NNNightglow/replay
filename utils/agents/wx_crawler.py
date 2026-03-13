@@ -85,6 +85,72 @@ def _is_wechat_blocked(html: str) -> bool:
     return "mp.weixin.qq.com/s" in lowered and "msg_title" not in lowered
 
 
+def _safe_datetime_from_unix(raw: str) -> str:
+    try:
+        ts = int((raw or "").strip())
+    except Exception:
+        return ""
+    if ts <= 0:
+        return ""
+    try:
+        return datetime.fromtimestamp(ts, timezone.utc).isoformat()
+    except Exception:
+        return ""
+
+
+def _safe_datetime_from_text(raw: str) -> str:
+    value = (raw or "").strip().replace("/", "-")
+    if not value:
+        return ""
+    fmts = [
+        "%Y-%m-%d %H:%M:%S",
+        "%Y-%m-%d %H:%M",
+        "%Y-%m-%d",
+    ]
+    for fmt in fmts:
+        try:
+            dt_obj = datetime.strptime(value, fmt)
+            if fmt == "%Y-%m-%d":
+                dt_obj = dt_obj.replace(hour=0, minute=0, second=0)
+            return dt_obj.replace(tzinfo=timezone.utc).isoformat()
+        except Exception:
+            continue
+    return ""
+
+
+def _extract_published_at(html: str, soup: BeautifulSoup) -> str:
+    meta_candidates = [
+        soup.find("meta", attrs={"property": "article:published_time"}),
+        soup.find("meta", attrs={"name": "publishdate"}),
+        soup.find("meta", attrs={"name": "PublishDate"}),
+    ]
+    for node in meta_candidates:
+        if not node:
+            continue
+        value = _safe_datetime_from_text(node.get("content", ""))
+        if value:
+            return value
+
+    patterns = [
+        r"(?:var\s+ct|window\.__ct)\s*=\s*\"?(\d{10})\"?",
+        r"\"publish_time\"\\s*:\\s*\"([0-9:\\-\\s/]+)\"",
+        r"\"ori_create_time\"\\s*:\\s*\"?(\d{10})\"?",
+    ]
+    for pattern in patterns:
+        match = re.search(pattern, html or "")
+        if not match:
+            continue
+        raw = (match.group(1) or "").strip()
+        if raw.isdigit() and len(raw) == 10:
+            value = _safe_datetime_from_unix(raw)
+        else:
+            value = _safe_datetime_from_text(raw)
+        if value:
+            return value
+
+    return ""
+
+
 def _load_cookie_override(cookie_override: str = "") -> str:
     if cookie_override and cookie_override.strip():
         return cookie_override.strip()
@@ -161,6 +227,7 @@ def fetch_wechat_article(url: str, timeout: int = 30, cookie_override: str = "")
     else:
         content_text = soup.get_text("\n", strip=True)
         content_html = ""
+    published_at = _extract_published_at(html, soup)
 
     return {
         "url": url,
@@ -168,6 +235,7 @@ def fetch_wechat_article(url: str, timeout: int = 30, cookie_override: str = "")
         "content": content_text,
         "content_html": content_html,
         "fetched_at_utc": datetime.now(timezone.utc).isoformat(),
+        "published_at": published_at,
     }
 
 
@@ -281,6 +349,7 @@ def save_article_as_markdown(article: Dict, output_dir: Path) -> Path:
     title = article.get("title", "微信公众号文章")
     content = article.get("content", "")
     fetched_at = article.get("fetched_at_utc", "")
+    published_at = article.get("published_at", "")
     content_html = article.get("content_html", "")
 
     digest = hashlib.md5(url.encode("utf-8")).hexdigest()[:12]
@@ -314,6 +383,10 @@ def save_article_as_markdown(article: Dict, output_dir: Path) -> Path:
             f'title: "{title}"',
             f'source_url: "{url}"',
             f"fetched_at_utc: {fetched_at}",
+            f"published_at: {published_at}",
+            f"content_time: {published_at}",
+            "content_time_type: published",
+            f'content_time_evidence: "{("wechat:published_at" if published_at else "")}"',
             "status: ok",
             "---",
             "",
@@ -609,6 +682,8 @@ def crawl_wechat_articles_from_text(
                 {
                     "url": url,
                     "title": article.get("title", ""),
+                    "published_at": article.get("published_at", ""),
+                    "fetched_at_utc": article.get("fetched_at_utc", ""),
                     "status": "ok",
                     "markdown_path": str(md_path),
                     "pdf_path": str(pdf_path) if pdf_path else None,

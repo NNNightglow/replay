@@ -486,6 +486,60 @@ class ApiService {
     return api.post(`/api/strategy-watch/strategies/${strategyId}/generate-view`, payload)
   }
 
+  static async getMemoryProfiles() {
+    return api.get('/api/strategy-watch/memory-profiles')
+  }
+
+  static async createMemoryProfile(payload = {}) {
+    return api.post('/api/strategy-watch/memory-profiles', payload)
+  }
+
+  static async updateMemoryProfile(profileId, payload = {}) {
+    return api.patch(`/api/strategy-watch/memory-profiles/${profileId}`, payload)
+  }
+
+  static async deleteMemoryProfile(profileId) {
+    return api.delete(`/api/strategy-watch/memory-profiles/${profileId}`)
+  }
+
+  static async setActiveMemoryProfile(profileId) {
+    return api.patch('/api/strategy-watch/memory-profiles/active', { profile_id: profileId || '' })
+  }
+
+  static async bindMemoryProfileResources(profileId, resourceIds = []) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/bind-resources`, {
+      resource_ids: Array.isArray(resourceIds) ? resourceIds : []
+    })
+  }
+
+  static async bindMemoryProfileGroup(profileId, groupId) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/bind-group`, {
+      group_id: groupId || ''
+    })
+  }
+
+  static async syncMemoryProfileGroup(profileId, groupId = '') {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/sync-group`, {
+      group_id: groupId || ''
+    })
+  }
+
+  static async extractMemoryPortraitDraft(profileId) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/extract-portrait-draft`, {})
+  }
+
+  static async getMemoryPortrait(profileId) {
+    return api.get(`/api/strategy-watch/memory-profiles/${profileId}/portrait`)
+  }
+
+  static async updateMemoryPortrait(profileId, payload = {}) {
+    return api.patch(`/api/strategy-watch/memory-profiles/${profileId}/portrait`, payload)
+  }
+
+  static async previewMemoryProfileContext(profileId) {
+    return api.get(`/api/strategy-watch/memory-profiles/${profileId}/preview-context`)
+  }
+
   static async triggerManualUpdate(target) {
     return api.post(`/api/admin/update/${target}`)
   }

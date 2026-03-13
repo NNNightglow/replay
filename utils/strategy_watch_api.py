@@ -10,7 +10,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from flask import Blueprint, jsonify, request, send_file, Response, stream_with_context
 from werkzeug.utils import secure_filename
@@ -37,12 +37,20 @@ CONVERSATIONS_FILE = STORE_DIR / "conversations.json"
 STRATEGIES_FILE = STORE_DIR / "strategies.json"
 STRATEGY_INDEX_FILE = STORE_DIR / "strategies_index.json"
 STRATEGY_DIR = STORE_DIR / "strategies"
+MEMORY_PROFILES_FILE = STORE_DIR / "memory_profiles.json"
+MEMORY_LINKS_FILE = STORE_DIR / "memory_links.json"
+MEMORY_PORTRAITS_FILE = STORE_DIR / "memory_portraits.json"
 
 MAX_CONTEXT_CHARS = 120_000
 MAX_RESOURCE_CHARS = 30_000
 MAX_HISTORY_MESSAGES = 24
+MAX_MEMORY_CONTEXT_CHARS = 40_000
 DEFAULT_GROUP_NAME = "未分组"
 DEFAULT_STRATEGY_VIEW = "basic"
+
+_DATE_YMD_SEP_PATTERN = re.compile(r"(?<!\d)(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?(?!\d)")
+_DATE_YMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
+_DATE_YYMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)")
 
 _STORE_LOCK = threading.Lock()
 _JOB_LOCK = threading.Lock()
@@ -129,6 +137,215 @@ def _write_json(path: Path, data) -> None:
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def _safe_date_str(year: int, month: int, day: int) -> str:
+    try:
+        return datetime(year, month, day, tzinfo=timezone.utc).date().isoformat()
+    except Exception:
+        return ""
+
+
+def _extract_first_date(text: str) -> Tuple[str, str]:
+    if not text:
+        return "", ""
+    match = _DATE_YMD_SEP_PATTERN.search(text)
+    if match:
+        date_str = _safe_date_str(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if date_str:
+            return date_str, match.group(0)
+    match = _DATE_YMD_COMPACT_PATTERN.search(text)
+    if match:
+        date_str = _safe_date_str(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+        if date_str:
+            return date_str, match.group(0)
+    match = _DATE_YYMD_COMPACT_PATTERN.search(text)
+    if match:
+        yy = int(match.group(1))
+        year = (2000 + yy) if yy <= 69 else (1900 + yy)
+        date_str = _safe_date_str(year, int(match.group(2)), int(match.group(3)))
+        if date_str:
+            return date_str, match.group(0)
+    return "", ""
+
+
+def _normalize_date_only(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    lowered = raw.replace("Z", "+00:00")
+    try:
+        dt_obj = datetime.fromisoformat(lowered)
+        return dt_obj.date().isoformat()
+    except Exception:
+        pass
+    date_str, _ = _extract_first_date(raw)
+    return date_str
+
+
+def _normalize_datetime_to_iso(value: str) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    lowered = raw.replace("Z", "+00:00").replace("/", "-")
+    try:
+        return datetime.fromisoformat(lowered).astimezone(timezone.utc).isoformat()
+    except Exception:
+        pass
+
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M", "%Y-%m-%d"):
+        try:
+            parsed = datetime.strptime(lowered, fmt)
+            if fmt == "%Y-%m-%d":
+                parsed = parsed.replace(hour=0, minute=0, second=0)
+            return parsed.replace(tzinfo=timezone.utc).isoformat()
+        except Exception:
+            continue
+    return ""
+
+
+def _parse_frontmatter_map(text: str) -> Dict[str, str]:
+    if not text.startswith("---"):
+        return {}
+    parts = text.split("---", 2)
+    if len(parts) < 3:
+        return {}
+    front = parts[1]
+    result: Dict[str, str] = {}
+    for raw in front.splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or ":" not in line:
+            continue
+        key, val = line.split(":", 1)
+        key = key.strip().lower()
+        val = val.strip().strip('"').strip("'")
+        if key:
+            result[key] = val
+    return result
+
+
+def _read_markdown_text_by_relpath(rel_path: str) -> str:
+    target = (rel_path or "").strip()
+    if not target or "://" in target:
+        return ""
+    md_path = BASE_DIR / target
+    if not md_path.exists() or not md_path.is_file():
+        return ""
+    return md_path.read_text(encoding="utf-8", errors="ignore")
+
+
+def _enrich_resource_temporal_fields(record: Dict, markdown_text: str = "") -> bool:
+    changed = False
+    record.setdefault("content_time", "")
+    record.setdefault("content_time_type", "unknown")
+    record.setdefault("content_time_confidence", 0.0)
+    record.setdefault("content_time_evidence", "")
+    record.setdefault("published_at", "")
+
+    if not isinstance(record.get("content_time_confidence"), (int, float)):
+        record["content_time_confidence"] = 0.0
+        changed = True
+
+    normalized_published = _normalize_datetime_to_iso(record.get("published_at", ""))
+    if normalized_published != (record.get("published_at") or ""):
+        record["published_at"] = normalized_published
+        changed = True
+
+    normalized_content_time = _normalize_date_only(record.get("content_time", ""))
+    if normalized_content_time != (record.get("content_time") or ""):
+        record["content_time"] = normalized_content_time
+        changed = True
+
+    if not record.get("content_time"):
+        inferred_date, hit = _extract_first_date(record.get("original_name") or "")
+        if inferred_date:
+            record["content_time"] = inferred_date
+            record["content_time_type"] = "inferred_filename"
+            record["content_time_confidence"] = 0.70
+            record["content_time_evidence"] = f"filename:{hit}"
+            changed = True
+
+    text = markdown_text or ""
+    if text:
+        front = _parse_frontmatter_map(text)
+
+        if not record.get("published_at"):
+            for key in ("published_at", "publish_time", "published_time", "publishdate", "date"):
+                candidate = _normalize_datetime_to_iso(front.get(key, ""))
+                if candidate:
+                    record["published_at"] = candidate
+                    changed = True
+                    break
+
+        better_content_time = ""
+        better_type = ""
+        better_evidence = ""
+        better_conf = 0.0
+
+        for key in ("content_time", "recorded_at", "publish_date", "published_at", "date"):
+            raw = front.get(key, "")
+            normalized = _normalize_date_only(raw)
+            if not normalized:
+                continue
+            if key in {"published_at", "publish_date"}:
+                better_type = "published"
+                better_conf = 0.95
+            elif key in {"recorded_at"}:
+                better_type = "recorded"
+                better_conf = 0.90
+            else:
+                better_type = "inferred_text"
+                better_conf = 0.82
+            better_content_time = normalized
+            better_evidence = f"frontmatter:{key}"
+            break
+
+        if not better_content_time:
+            sample = "\n".join(
+                [
+                    front.get("title", ""),
+                    text[:5000],
+                ]
+            )
+            inferred_date, hit = _extract_first_date(sample)
+            if inferred_date:
+                better_content_time = inferred_date
+                better_type = "inferred_text"
+                better_conf = 0.55
+                better_evidence = f"content:{hit}"
+
+        current_type = (record.get("content_time_type") or "unknown").strip() or "unknown"
+        priority = {
+            "unknown": 0,
+            "inferred_text": 1,
+            "inferred_filename": 2,
+            "recorded": 3,
+            "published": 4,
+        }
+        if better_content_time:
+            should_replace = not record.get("content_time")
+            if not should_replace:
+                should_replace = priority.get(better_type, 0) >= priority.get(current_type, 0)
+            if should_replace:
+                record["content_time"] = better_content_time
+                record["content_time_type"] = better_type
+                record["content_time_confidence"] = better_conf
+                record["content_time_evidence"] = better_evidence
+                changed = True
+
+    if not record.get("content_time_type"):
+        record["content_time_type"] = "unknown"
+        changed = True
+
+    if not record.get("content_time"):
+        if record.get("content_time_confidence") != 0.0:
+            record["content_time_confidence"] = 0.0
+            changed = True
+        if record.get("content_time_type") != "unknown":
+            record["content_time_type"] = "unknown"
+            changed = True
+
+    return changed
+
+
 def _normalize_resource_record(record: Dict) -> Dict:
     group_id = (record.get("group_id") or "").strip()
     group_name = (record.get("group_name") or "").strip()
@@ -144,6 +361,7 @@ def _normalize_resource_record(record: Dict) -> Dict:
     record["strategy_name"] = (record.get("strategy_name") or "").strip()
     record.setdefault("progress", 0)
     record.setdefault("progress_message", "")
+    _enrich_resource_temporal_fields(record)
     return record
 
 
@@ -264,10 +482,24 @@ def _load_resources_payload() -> Dict:
         raw = {"resources": raw, "active_resource_id": ""}
     resources = raw.get("resources", [])
     normalized: List[Dict] = []
+    touched = False
     for item in resources:
         if isinstance(item, dict):
-            normalized.append(_normalize_resource_record(item))
+            normalized_item = _normalize_resource_record(item)
+            md_rel = (normalized_item.get("markdown_relpath") or "").strip()
+            should_probe_markdown = (
+                (not normalized_item.get("content_time"))
+                or (normalized_item.get("content_time_type") in {"unknown", "inferred_filename"})
+                or (not normalized_item.get("published_at"))
+            )
+            if should_probe_markdown and md_rel:
+                md_text = _read_markdown_text_by_relpath(md_rel)
+                if md_text and _enrich_resource_temporal_fields(normalized_item, markdown_text=md_text):
+                    touched = True
+            normalized.append(normalized_item)
     active_resource_id = (raw.get("active_resource_id") or "").strip()
+    if touched:
+        _save_resources_payload({"resources": normalized, "active_resource_id": active_resource_id})
     return {"resources": normalized, "active_resource_id": active_resource_id}
 
 
@@ -456,6 +688,494 @@ def _save_strategies_payload(payload: Dict) -> None:
             "active_strategy_id": active_strategy_id,
         },
     )
+
+
+def _normalize_memory_subscription(item: Dict) -> Optional[Dict]:
+    if not isinstance(item, dict):
+        return None
+    group_id = (item.get("group_id") or "").strip()
+    if not group_id:
+        return None
+    first_bound_at = (item.get("first_bound_at") or _now_iso()).strip()
+    last_sync_at = (item.get("last_sync_at") or "").strip()
+    return {
+        "group_id": group_id,
+        "first_bound_at": first_bound_at,
+        "last_sync_at": last_sync_at,
+    }
+
+
+def _normalize_memory_profile_record(profile: Dict) -> Dict:
+    raw_id = (profile.get("id") or "").strip()
+    normalized_id = _normalize_strategy_id(raw_id, allow_empty=True) or _gen_id("mp")
+    subs_raw = profile.get("group_subscriptions") if isinstance(profile.get("group_subscriptions"), list) else []
+    normalized_subs: List[Dict] = []
+    seen_subs = set()
+    for item in subs_raw:
+        sub = _normalize_memory_subscription(item)
+        if not sub:
+            continue
+        gid = sub["group_id"]
+        if gid in seen_subs:
+            continue
+        seen_subs.add(gid)
+        normalized_subs.append(sub)
+    created_at = (profile.get("created_at") or _now_iso()).strip()
+    updated_at = (profile.get("updated_at") or created_at).strip()
+    return {
+        "id": normalized_id,
+        "name": (profile.get("name") or "").strip() or normalized_id,
+        "description": (profile.get("description") or "").strip(),
+        "source_blogger": (profile.get("source_blogger") or "").strip(),
+        "created_at": created_at,
+        "updated_at": updated_at,
+        "group_subscriptions": normalized_subs,
+    }
+
+
+def _load_memory_profiles_payload() -> Dict:
+    _ensure_store()
+    raw = _read_json(MEMORY_PROFILES_FILE, {"profiles": [], "active_profile_id": ""})
+    if isinstance(raw, list):
+        raw = {"profiles": raw, "active_profile_id": ""}
+
+    profiles: List[Dict] = []
+    seen = set()
+    for item in (raw.get("profiles") or []):
+        if not isinstance(item, dict):
+            continue
+        normalized = _normalize_memory_profile_record(item)
+        pid = normalized["id"]
+        if pid in seen:
+            continue
+        seen.add(pid)
+        profiles.append(normalized)
+
+    active_profile_id = (raw.get("active_profile_id") or "").strip()
+    valid_ids = {item["id"] for item in profiles}
+    if active_profile_id not in valid_ids:
+        active_profile_id = ""
+    return {"profiles": profiles, "active_profile_id": active_profile_id}
+
+
+def _save_memory_profiles_payload(payload: Dict) -> None:
+    _ensure_store()
+    raw_list = payload.get("profiles")
+    if not isinstance(raw_list, list):
+        raw_list = []
+    profiles: List[Dict] = []
+    seen = set()
+    for item in raw_list:
+        if not isinstance(item, dict):
+            continue
+        normalized = _normalize_memory_profile_record(item)
+        pid = normalized["id"]
+        if pid in seen:
+            continue
+        seen.add(pid)
+        profiles.append(normalized)
+    active_profile_id = (payload.get("active_profile_id") or "").strip()
+    valid_ids = {item["id"] for item in profiles}
+    if active_profile_id not in valid_ids:
+        active_profile_id = ""
+    _write_json(
+        MEMORY_PROFILES_FILE,
+        {
+            "profiles": profiles,
+            "active_profile_id": active_profile_id,
+        },
+    )
+
+
+def _normalize_memory_link(item: Dict) -> Optional[Dict]:
+    if not isinstance(item, dict):
+        return None
+    profile_id = (item.get("profile_id") or "").strip()
+    resource_id = (item.get("resource_id") or "").strip()
+    if not profile_id or not resource_id:
+        return None
+    bind_source = (item.get("bind_source") or "manual").strip().lower()
+    if bind_source not in {"manual", "group"}:
+        bind_source = "manual"
+    group_id = (item.get("group_id") or "").strip()
+    added_at = (item.get("added_at") or _now_iso()).strip()
+    return {
+        "profile_id": profile_id,
+        "resource_id": resource_id,
+        "bind_source": bind_source,
+        "group_id": group_id,
+        "added_at": added_at,
+    }
+
+
+def _load_memory_links() -> List[Dict]:
+    _ensure_store()
+    raw = _read_json(MEMORY_LINKS_FILE, {"links": []})
+    if isinstance(raw, list):
+        raw = {"links": raw}
+    links: List[Dict] = []
+    seen = set()
+    for item in (raw.get("links") or []):
+        normalized = _normalize_memory_link(item)
+        if not normalized:
+            continue
+        key = (normalized["profile_id"], normalized["resource_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        links.append(normalized)
+    return links
+
+
+def _save_memory_links(links: List[Dict]) -> None:
+    _ensure_store()
+    normalized_links: List[Dict] = []
+    seen = set()
+    for item in (links or []):
+        normalized = _normalize_memory_link(item)
+        if not normalized:
+            continue
+        key = (normalized["profile_id"], normalized["resource_id"])
+        if key in seen:
+            continue
+        seen.add(key)
+        normalized_links.append(normalized)
+    _write_json(MEMORY_LINKS_FILE, {"links": normalized_links})
+
+
+def _default_memory_portrait(profile_id: str) -> Dict:
+    return {
+        "profile_id": profile_id,
+        "methodology": "",
+        "tactics": "",
+        "views": "",
+        "operations": "",
+        "risk_rules": "",
+        "style_constraints": "",
+        "evidence_refs": [],
+        "updated_at": _now_iso(),
+        "updated_by": "",
+    }
+
+
+def _normalize_evidence_ref(item: Dict) -> Optional[Dict]:
+    if not isinstance(item, dict):
+        return None
+    resource_id = (item.get("resource_id") or "").strip()
+    quote = (item.get("quote") or "").strip()
+    if not resource_id and not quote:
+        return None
+    return {
+        "id": (item.get("id") or _gen_id("ev")).strip(),
+        "resource_id": resource_id,
+        "topic": (item.get("topic") or "").strip(),
+        "quote": quote,
+        "source_time": _normalize_date_only(item.get("source_time") or ""),
+        "source_time_type": (item.get("source_time_type") or "").strip(),
+        "timecode": (item.get("timecode") or "").strip(),
+    }
+
+
+def _normalize_memory_portrait(item: Dict) -> Optional[Dict]:
+    if not isinstance(item, dict):
+        return None
+    profile_id = (item.get("profile_id") or "").strip()
+    if not profile_id:
+        return None
+    normalized = _default_memory_portrait(profile_id)
+    for key in ("methodology", "tactics", "views", "operations", "risk_rules", "style_constraints"):
+        normalized[key] = (item.get(key) or "").strip()
+    refs_raw = item.get("evidence_refs") if isinstance(item.get("evidence_refs"), list) else []
+    refs: List[Dict] = []
+    seen = set()
+    for ref in refs_raw:
+        normalized_ref = _normalize_evidence_ref(ref)
+        if not normalized_ref:
+            continue
+        rid = normalized_ref["id"]
+        if rid in seen:
+            continue
+        seen.add(rid)
+        refs.append(normalized_ref)
+    normalized["evidence_refs"] = refs
+    normalized["updated_at"] = (item.get("updated_at") or _now_iso()).strip()
+    normalized["updated_by"] = (item.get("updated_by") or "").strip()
+    return normalized
+
+
+def _load_memory_portraits() -> Dict[str, Dict]:
+    _ensure_store()
+    raw = _read_json(MEMORY_PORTRAITS_FILE, {"portraits": []})
+    if isinstance(raw, list):
+        raw = {"portraits": raw}
+    portraits: Dict[str, Dict] = {}
+    for item in (raw.get("portraits") or []):
+        normalized = _normalize_memory_portrait(item)
+        if not normalized:
+            continue
+        portraits[normalized["profile_id"]] = normalized
+    return portraits
+
+
+def _save_memory_portraits(portraits: Dict[str, Dict]) -> None:
+    _ensure_store()
+    if not isinstance(portraits, dict):
+        portraits = {}
+    records: List[Dict] = []
+    for profile_id, value in portraits.items():
+        rec = dict(value or {})
+        rec["profile_id"] = profile_id
+        normalized = _normalize_memory_portrait(rec)
+        if normalized:
+            records.append(normalized)
+    _write_json(MEMORY_PORTRAITS_FILE, {"portraits": records})
+
+
+def _find_memory_profile(profile_id: str) -> Optional[Dict]:
+    target_id = (profile_id or "").strip()
+    if not target_id:
+        return None
+    payload = _load_memory_profiles_payload()
+    return _find_by_id(payload.get("profiles", []), target_id)
+
+
+def _collect_profile_resource_snippets(
+    profile_id: str,
+    max_chars: int = 24000,
+    max_items: int = 10,
+    per_item_chars: int = 2200,
+) -> Tuple[str, List[str], List[Dict]]:
+    links = [x for x in _load_memory_links() if x.get("profile_id") == profile_id]
+    links.sort(key=lambda x: x.get("added_at", ""), reverse=True)
+    resources_payload = _load_resources_payload()
+    resources = resources_payload.get("resources", [])
+    resource_map = {item.get("id"): item for item in resources}
+
+    used_ids: List[str] = []
+    skipped: List[Dict] = []
+    blocks: List[str] = []
+    total = 0
+    for link in links:
+        if len(used_ids) >= max_items:
+            break
+        rid = (link.get("resource_id") or "").strip()
+        item = resource_map.get(rid)
+        if not item:
+            skipped.append({"resource_id": rid, "reason": "资源不存在"})
+            continue
+        if (item.get("status") or "") != "ok":
+            skipped.append({"resource_id": rid, "reason": f"资源状态异常: {item.get('status') or 'unknown'}"})
+            continue
+        md_text = _read_markdown_content(item).strip()
+        if not md_text:
+            skipped.append({"resource_id": rid, "reason": "markdown 文件不存在或为空"})
+            continue
+        if not _markdown_has_meaningful_content(md_text):
+            skipped.append({"resource_id": rid, "reason": "markdown 信息量不足"})
+            continue
+
+        snippet = md_text[:per_item_chars]
+        name = item.get("original_name") or rid
+        content_time = item.get("content_time") or ""
+        time_label = f"（内容时间: {content_time}）" if content_time else ""
+        block = f"### 资料: {name}{time_label}\n\n{snippet}"
+        projected = total + len(block)
+        if projected > max_chars:
+            remain = max_chars - total
+            if remain <= 0:
+                break
+            block = block[:remain]
+            projected = total + len(block)
+        blocks.append(block)
+        used_ids.append(rid)
+        total = projected
+        if total >= max_chars:
+            break
+    return "\n\n".join(blocks).strip(), used_ids, skipped
+
+
+def _build_memory_profile_context(memory_profile_id: str) -> Tuple[str, Dict[str, Any]]:
+    profile_id = (memory_profile_id or "").strip()
+    if not profile_id:
+        return "", {"memory_profile_id": "", "used_memory_resource_ids": [], "skipped_memory_refs": []}
+
+    profiles_payload = _load_memory_profiles_payload()
+    profiles = profiles_payload.get("profiles", [])
+    profile = _find_by_id(profiles, profile_id)
+    if not profile:
+        return "", {
+            "memory_profile_id": "",
+            "used_memory_resource_ids": [],
+            "skipped_memory_refs": [{"profile_id": profile_id, "reason": "人格不存在"}],
+        }
+
+    portraits = _load_memory_portraits()
+    portrait = portraits.get(profile_id) or _default_memory_portrait(profile_id)
+
+    lines: List[str] = [
+        f"长期记忆人格：{profile.get('name') or profile_id}",
+        f"- 人格ID: {profile_id}",
+    ]
+    description = (profile.get("description") or "").strip()
+    if description:
+        lines.append(f"- 人格说明: {description}")
+    source_blogger = (profile.get("source_blogger") or "").strip()
+    if source_blogger:
+        lines.append(f"- 来源博主: {source_blogger}")
+
+    sections = [
+        ("交易方法论", "methodology"),
+        ("交易手法", "tactics"),
+        ("观点", "views"),
+        ("交易操作", "operations"),
+        ("风控规则", "risk_rules"),
+        ("风格约束", "style_constraints"),
+    ]
+    for title, key in sections:
+        text = (portrait.get(key) or "").strip()
+        if not text:
+            continue
+        lines.extend(["", f"## {title}", text])
+
+    evidence_refs = portrait.get("evidence_refs") if isinstance(portrait.get("evidence_refs"), list) else []
+    if evidence_refs:
+        lines.extend(["", "## 证据索引"])
+        for idx, ref in enumerate(evidence_refs, start=1):
+            resource_id = (ref.get("resource_id") or "").strip() if isinstance(ref, dict) else ""
+            quote = (ref.get("quote") or "").strip() if isinstance(ref, dict) else ""
+            topic = (ref.get("topic") or "").strip() if isinstance(ref, dict) else ""
+            source_time = (ref.get("source_time") or "").strip() if isinstance(ref, dict) else ""
+            timecode = (ref.get("timecode") or "").strip() if isinstance(ref, dict) else ""
+            meta = " | ".join(
+                [x for x in [topic, source_time, timecode, resource_id] if x]
+            )
+            if quote:
+                lines.append(f"{idx}. {quote} {'（' + meta + '）' if meta else ''}")
+            elif meta:
+                lines.append(f"{idx}. {meta}")
+
+    base_context = "\n".join(lines).strip()
+    remain_chars = max(0, MAX_MEMORY_CONTEXT_CHARS - len(base_context) - 2_000)
+    snippets, used_ids, skipped = _collect_profile_resource_snippets(
+        profile_id,
+        max_chars=max(8_000, remain_chars),
+        max_items=8,
+        per_item_chars=1_800,
+    )
+    if snippets:
+        base_context += "\n\n## 关联资料摘录\n\n" + snippets
+
+    if len(base_context) > MAX_MEMORY_CONTEXT_CHARS:
+        base_context = base_context[:MAX_MEMORY_CONTEXT_CHARS]
+
+    return base_context.strip(), {
+        "memory_profile_id": profile_id,
+        "memory_profile_name": profile.get("name") or profile_id,
+        "used_memory_resource_ids": used_ids,
+        "skipped_memory_refs": skipped,
+    }
+
+
+def _bind_resources_to_profile(
+    profile_id: str,
+    resource_ids: List[str],
+    bind_source: str = "manual",
+    group_id: str = "",
+) -> Dict[str, Any]:
+    target_ids = [str(x).strip() for x in (resource_ids or []) if str(x).strip()]
+    target_ids = list(dict.fromkeys(target_ids))
+
+    resources_payload = _load_resources_payload()
+    resource_map = {item.get("id"): item for item in resources_payload.get("resources", [])}
+    links = _load_memory_links()
+    existing = {(x.get("profile_id"), x.get("resource_id")) for x in links}
+
+    added = 0
+    skipped: List[Dict] = []
+    for rid in target_ids:
+        item = resource_map.get(rid)
+        if not item:
+            skipped.append({"resource_id": rid, "reason": "资源不存在"})
+            continue
+        key = (profile_id, rid)
+        if key in existing:
+            skipped.append({"resource_id": rid, "reason": "已在人格长期记忆中"})
+            continue
+        links.append(
+            {
+                "profile_id": profile_id,
+                "resource_id": rid,
+                "bind_source": bind_source,
+                "group_id": group_id,
+                "added_at": _now_iso(),
+            }
+        )
+        existing.add(key)
+        added += 1
+
+    _save_memory_links(links)
+    return {"added": added, "skipped": skipped}
+
+
+def _upsert_profile_subscription(profile: Dict, group_id: str, sync_now: bool = False) -> bool:
+    group_id = (group_id or "").strip()
+    if not group_id:
+        return False
+    subs = profile.get("group_subscriptions") if isinstance(profile.get("group_subscriptions"), list) else []
+    now = _now_iso()
+    for sub in subs:
+        if not isinstance(sub, dict):
+            continue
+        if (sub.get("group_id") or "").strip() == group_id:
+            if sync_now:
+                sub["last_sync_at"] = now
+            profile["group_subscriptions"] = subs
+            return False
+    subs.append(
+        {
+            "group_id": group_id,
+            "first_bound_at": now,
+            "last_sync_at": now if sync_now else "",
+        }
+    )
+    profile["group_subscriptions"] = subs
+    return True
+
+
+def _sync_profile_group_resources(profile: Dict, group_id: str) -> Dict[str, Any]:
+    gid = (group_id or "").strip()
+    if not gid:
+        return {"added": 0, "skipped": [{"group_id": gid, "reason": "缺少 group_id"}]}
+    resources_payload = _load_resources_payload()
+    group_resource_ids = [
+        (item.get("id") or "").strip()
+        for item in resources_payload.get("resources", [])
+        if (item.get("group_id") or "").strip() == gid and (item.get("id") or "").strip()
+    ]
+    result = _bind_resources_to_profile(
+        profile_id=profile.get("id") or "",
+        resource_ids=group_resource_ids,
+        bind_source="group",
+        group_id=gid,
+    )
+    _upsert_profile_subscription(profile, gid, sync_now=True)
+    return result
+
+
+def _memory_profile_view(profile: Dict, links: List[Dict], portraits: Dict[str, Dict]) -> Dict:
+    pid = (profile.get("id") or "").strip()
+    linked_ids = [item.get("resource_id") for item in links if item.get("profile_id") == pid]
+    portrait = portraits.get(pid) or _default_memory_portrait(pid)
+    subscription_ids = []
+    for sub in (profile.get("group_subscriptions") or []):
+        if isinstance(sub, dict) and (sub.get("group_id") or "").strip():
+            subscription_ids.append((sub.get("group_id") or "").strip())
+    return {
+        **profile,
+        "linked_resource_count": len(set(linked_ids)),
+        "group_subscription_count": len(set(subscription_ids)),
+        "portrait_updated_at": portrait.get("updated_at") or "",
+    }
 
 
 def _extract_json_block(text: str) -> Dict:
@@ -759,6 +1479,8 @@ def _register_crawled_resources(crawl_results: List[Dict]) -> List[str]:
 
         rid = _gen_id("res")
         rel_markdown = md_path.relative_to(BASE_DIR).as_posix()
+        published_at = _normalize_datetime_to_iso(item.get("published_at") or "")
+        content_time = _normalize_date_only(item.get("published_at") or "")
         record = {
             "id": rid,
             "original_name": item.get("title") or item.get("url"),
@@ -774,6 +1496,11 @@ def _register_crawled_resources(crawl_results: List[Dict]) -> List[str]:
             "markdown_relpath": rel_markdown,
             "group_id": crawl_group_id,
             "group_name": crawl_group_name,
+            "published_at": published_at,
+            "content_time": content_time,
+            "content_time_type": "published" if content_time else "unknown",
+            "content_time_confidence": 0.95 if content_time else 0.0,
+            "content_time_evidence": ("wechat:published_at" if content_time else ""),
         }
         resources.append(record)
         created_ids.append(rid)
@@ -996,6 +1723,7 @@ def upload_strategy_resources():
 
             rel_upload = upload_path.relative_to(BASE_DIR).as_posix()
             rel_markdown = markdown_path.relative_to(BASE_DIR).as_posix()
+            inferred_content_time, inferred_hit = _extract_first_date(original_name)
             record = {
                 "id": rid,
                 "original_name": original_name,
@@ -1014,6 +1742,11 @@ def upload_strategy_resources():
                 "strategy_name": strategy_name,
                 "progress": 0,
                 "progress_message": "排队中",
+                "published_at": "",
+                "content_time": inferred_content_time,
+                "content_time_type": "inferred_filename" if inferred_content_time else "unknown",
+                "content_time_confidence": 0.70 if inferred_content_time else 0.0,
+                "content_time_evidence": (f"filename:{inferred_hit}" if inferred_content_time else ""),
             }
             resources.append(record)
             uploaded.append(record)
@@ -1447,6 +2180,414 @@ def set_active_strategy_resource():
     )
 
 
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles", methods=["GET"])
+def list_memory_profiles():
+    with _STORE_LOCK:
+        payload = _load_memory_profiles_payload()
+        profiles = payload.get("profiles", [])
+        active_profile_id = payload.get("active_profile_id") or ""
+        links = _load_memory_links()
+        portraits = _load_memory_portraits()
+    data = [_memory_profile_view(item, links, portraits) for item in profiles]
+    data.sort(key=lambda x: x.get("updated_at", ""), reverse=True)
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "profiles": data,
+                "active_profile_id": active_profile_id,
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles", methods=["POST"])
+def create_memory_profile():
+    payload = request.get_json(silent=True) or {}
+    name = (payload.get("name") or "").strip() or f"人格 {datetime.now().strftime('%m-%d %H:%M')}"
+    description = (payload.get("description") or "").strip()
+    source_blogger = (payload.get("source_blogger") or "").strip()
+    profile = {
+        "id": _gen_id("mp"),
+        "name": name,
+        "description": description,
+        "source_blogger": source_blogger,
+        "group_subscriptions": [],
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profiles = profiles_payload.get("profiles", [])
+        profiles.append(profile)
+        profiles_payload["profiles"] = profiles
+        if not profiles_payload.get("active_profile_id"):
+            profiles_payload["active_profile_id"] = profile["id"]
+        _save_memory_profiles_payload(profiles_payload)
+        portraits = _load_memory_portraits()
+        portraits[profile["id"]] = _default_memory_portrait(profile["id"])
+        _save_memory_portraits(portraits)
+    return jsonify({"success": True, "data": profile, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/active", methods=["PATCH"])
+def set_active_memory_profile():
+    payload = request.get_json(silent=True) or {}
+    profile_id = (payload.get("profile_id") or "").strip()
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profiles = profiles_payload.get("profiles", [])
+        if profile_id and not _find_by_id(profiles, profile_id):
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        profiles_payload["active_profile_id"] = profile_id
+        _save_memory_profiles_payload(profiles_payload)
+    return jsonify(
+        {"success": True, "data": {"active_profile_id": profile_id}, "timestamp": _now_iso()}
+    )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>", methods=["PATCH"])
+def update_memory_profile(profile_id: str):
+    payload = request.get_json(silent=True) or {}
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profiles = profiles_payload.get("profiles", [])
+        target = _find_by_id(profiles, profile_id)
+        if not target:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        if "name" in payload:
+            target["name"] = (payload.get("name") or "").strip() or target.get("name")
+        if "description" in payload:
+            target["description"] = (payload.get("description") or "").strip()
+        if "source_blogger" in payload:
+            target["source_blogger"] = (payload.get("source_blogger") or "").strip()
+        target["updated_at"] = _now_iso()
+        profiles_payload["profiles"] = profiles
+        _save_memory_profiles_payload(profiles_payload)
+    return jsonify({"success": True, "data": target, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>", methods=["DELETE"])
+def delete_memory_profile(profile_id: str):
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profiles = profiles_payload.get("profiles", [])
+        target = _find_by_id(profiles, profile_id)
+        if not target:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        profiles = [item for item in profiles if item.get("id") != profile_id]
+        profiles_payload["profiles"] = profiles
+        if profiles_payload.get("active_profile_id") == profile_id:
+            profiles_payload["active_profile_id"] = ""
+        _save_memory_profiles_payload(profiles_payload)
+
+        links = [item for item in _load_memory_links() if item.get("profile_id") != profile_id]
+        _save_memory_links(links)
+        portraits = _load_memory_portraits()
+        if profile_id in portraits:
+            portraits.pop(profile_id, None)
+            _save_memory_portraits(portraits)
+
+    return jsonify({"success": True, "message": "人格已删除。", "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/bind-resources", methods=["POST"])
+def bind_memory_profile_resources(profile_id: str):
+    payload = request.get_json(silent=True) or {}
+    resource_ids = payload.get("resource_ids") or []
+    if not isinstance(resource_ids, list):
+        resource_ids = []
+    if not resource_ids:
+        return jsonify({"success": False, "error": "resource_ids 不能为空。", "timestamp": _now_iso()}), 400
+
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        result = _bind_resources_to_profile(profile_id, resource_ids, bind_source="manual")
+        profile["updated_at"] = _now_iso()
+        _save_memory_profiles_payload(profiles_payload)
+
+    return jsonify({"success": True, "data": result, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/bind-group", methods=["POST"])
+def bind_memory_profile_group(profile_id: str):
+    payload = request.get_json(silent=True) or {}
+    group_id = (payload.get("group_id") or "").strip()
+    if not group_id:
+        return jsonify({"success": False, "error": "缺少 group_id。", "timestamp": _now_iso()}), 400
+
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+
+        result = _sync_profile_group_resources(profile, group_id)
+        profile["updated_at"] = _now_iso()
+        _save_memory_profiles_payload(profiles_payload)
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "group_id": group_id,
+                "added": result.get("added", 0),
+                "skipped": result.get("skipped", []),
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/sync-group", methods=["POST"])
+def sync_memory_profile_group(profile_id: str):
+    payload = request.get_json(silent=True) or {}
+    group_id = (payload.get("group_id") or "").strip()
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+
+        subs = profile.get("group_subscriptions") if isinstance(profile.get("group_subscriptions"), list) else []
+        target_group_ids = [group_id] if group_id else [
+            (item.get("group_id") or "").strip()
+            for item in subs
+            if isinstance(item, dict) and (item.get("group_id") or "").strip()
+        ]
+        if not target_group_ids:
+            return jsonify({"success": False, "error": "没有可同步的分组。", "timestamp": _now_iso()}), 400
+
+        total_added = 0
+        all_skipped: List[Dict] = []
+        sync_details: List[Dict] = []
+        for gid in target_group_ids:
+            result = _sync_profile_group_resources(profile, gid)
+            added = int(result.get("added") or 0)
+            skipped = result.get("skipped") or []
+            total_added += added
+            all_skipped.extend(skipped)
+            sync_details.append({"group_id": gid, "added": added, "skipped_count": len(skipped)})
+
+        profile["updated_at"] = _now_iso()
+        _save_memory_profiles_payload(profiles_payload)
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "synced_groups": sync_details,
+                "added": total_added,
+                "skipped": all_skipped,
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/extract-portrait-draft", methods=["POST"])
+def extract_memory_portrait_draft(profile_id: str):
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        portrait_map = _load_memory_portraits()
+        portrait = portrait_map.get(profile_id) or _default_memory_portrait(profile_id)
+
+    snippets, used_ids, skipped = _collect_profile_resource_snippets(
+        profile_id,
+        max_chars=32_000,
+        max_items=12,
+        per_item_chars=2_400,
+    )
+    if not snippets:
+        return jsonify(
+            {
+                "success": False,
+                "error": "当前人格还没有可用于侧写的资料，请先绑定资料。",
+                "timestamp": _now_iso(),
+            }
+        ), 400
+
+    prompt = (
+        "请基于资料生成人物侧写初稿，并返回 JSON（不要输出其他文字）。\n"
+        "JSON 字段:\n"
+        "{\n"
+        '  "methodology": "交易方法论",\n'
+        '  "tactics": "交易手法",\n'
+        '  "views": "观点",\n'
+        '  "operations": "交易操作",\n'
+        '  "risk_rules": "风控规则",\n'
+        '  "style_constraints": "表达与行为约束",\n'
+        '  "evidence_refs": [\n'
+        "    {\n"
+        '      "resource_id": "res_xxx",\n'
+        '      "topic": "观点|操作|方法论|手法",\n'
+        '      "quote": "关键证据原文",\n'
+        '      "source_time": "YYYY-MM-DD",\n'
+        '      "source_time_type": "published|recorded|inferred_filename|inferred_text",\n'
+        '      "timecode": "00:00:00-00:00:10"\n'
+        "    }\n"
+        "  ]\n"
+        "}\n"
+        "要求：证据尽量可追溯，source_time 优先使用资料内容时间。"
+    )
+
+    extra_context = (
+        f"人格名称: {(profile.get('name') or '').strip()}\n"
+        f"人格说明: {(profile.get('description') or '').strip()}\n"
+        f"来源博主: {(profile.get('source_blogger') or '').strip()}"
+    )
+    try:
+        reply, _model, _provider, _usage = chat_with_agent(
+            agent_name="data_processing_agent",
+            user_content=prompt,
+            history_messages=[],
+            resource_context=snippets,
+            extra_context=extra_context,
+            model_name="",
+            temperature=0.2,
+        )
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"侧写初稿生成失败: {exc}", "timestamp": _now_iso()}), 500
+
+    parsed = _extract_json_block(reply)
+    if not parsed:
+        parsed = {"methodology": reply}
+
+    def _section_to_text(value: Any) -> str:
+        if value is None:
+            return ""
+        if isinstance(value, str):
+            return value.strip()
+        if isinstance(value, list):
+            lines = []
+            for item in value:
+                txt = str(item or "").strip()
+                if txt:
+                    lines.append(f"- {txt}")
+            return "\n".join(lines).strip()
+        if isinstance(value, dict):
+            return json.dumps(value, ensure_ascii=False, indent=2)
+        return str(value).strip()
+
+    evidence_refs_raw = parsed.get("evidence_refs") if isinstance(parsed.get("evidence_refs"), list) else []
+    evidence_refs: List[Dict] = []
+    for item in evidence_refs_raw:
+        normalized = _normalize_evidence_ref(item)
+        if normalized:
+            evidence_refs.append(normalized)
+
+    portrait.update(
+        {
+            "methodology": _section_to_text(parsed.get("methodology")),
+            "tactics": _section_to_text(parsed.get("tactics")),
+            "views": _section_to_text(parsed.get("views")),
+            "operations": _section_to_text(parsed.get("operations")),
+            "risk_rules": _section_to_text(parsed.get("risk_rules")),
+            "style_constraints": _section_to_text(parsed.get("style_constraints")),
+            "evidence_refs": evidence_refs,
+            "updated_at": _now_iso(),
+            "updated_by": "ai_draft",
+        }
+    )
+
+    with _STORE_LOCK:
+        portrait_map = _load_memory_portraits()
+        portrait_map[profile_id] = portrait
+        _save_memory_portraits(portrait_map)
+        profiles_payload = _load_memory_profiles_payload()
+        target = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if target:
+            target["updated_at"] = _now_iso()
+            _save_memory_profiles_payload(profiles_payload)
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "portrait": portrait,
+                "used_resource_ids": used_ids,
+                "skipped_refs": skipped,
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/portrait", methods=["GET"])
+def get_memory_portrait(profile_id: str):
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        portrait_map = _load_memory_portraits()
+        portrait = portrait_map.get(profile_id) or _default_memory_portrait(profile_id)
+    return jsonify({"success": True, "data": portrait, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/portrait", methods=["PATCH"])
+def update_memory_portrait(profile_id: str):
+    payload = request.get_json(silent=True) or {}
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        portrait_map = _load_memory_portraits()
+        portrait = portrait_map.get(profile_id) or _default_memory_portrait(profile_id)
+
+        for key in ("methodology", "tactics", "views", "operations", "risk_rules", "style_constraints"):
+            if key in payload:
+                portrait[key] = (payload.get(key) or "").strip()
+
+        if "evidence_refs" in payload:
+            refs_raw = payload.get("evidence_refs")
+            refs = []
+            if isinstance(refs_raw, list):
+                for item in refs_raw:
+                    normalized = _normalize_evidence_ref(item)
+                    if normalized:
+                        refs.append(normalized)
+            portrait["evidence_refs"] = refs
+
+        portrait["updated_at"] = _now_iso()
+        portrait["updated_by"] = "manual"
+        portrait_map[profile_id] = portrait
+        _save_memory_portraits(portrait_map)
+
+        profile["updated_at"] = _now_iso()
+        _save_memory_profiles_payload(profiles_payload)
+
+    return jsonify({"success": True, "data": portrait, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/preview-context", methods=["GET"])
+def preview_memory_profile_context(profile_id: str):
+    context_text, meta = _build_memory_profile_context(profile_id)
+    if not context_text and not meta.get("memory_profile_id"):
+        return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "memory_profile_id": meta.get("memory_profile_id") or profile_id,
+                "memory_profile_name": meta.get("memory_profile_name") or "",
+                "context": context_text,
+                "used_memory_resource_ids": meta.get("used_memory_resource_ids") or [],
+                "skipped_memory_refs": meta.get("skipped_memory_refs") or [],
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
 @strategy_watch_bp.route("/api/strategy-watch/conversations", methods=["GET"])
 def list_strategy_conversations():
     with _STORE_LOCK:
@@ -1556,6 +2697,7 @@ def send_strategy_message(conversation_id: str):
     if not isinstance(resource_ids, list):
         resource_ids = []
     strategy_id = (payload.get("strategy_id") or "").strip()
+    memory_profile_id = (payload.get("memory_profile_id") or "").strip()
     prompt_template_id = (payload.get("prompt_template_id") or "").strip()
     prompt_template = (payload.get("prompt_template") or "").strip()
     llm_user_content = _compose_user_content_with_prompt_template(content, prompt_template)
@@ -1586,6 +2728,7 @@ def send_strategy_message(conversation_id: str):
             "resource_ids": resource_ids,
             "agent_name": agent_name,
             "strategy_id": strategy_id,
+            "memory_profile_id": memory_profile_id,
             "prompt_template_id": prompt_template_id,
             "prompt_template": prompt_template,
         }
@@ -1598,6 +2741,14 @@ def send_strategy_message(conversation_id: str):
 
     strategy_context, resolved_strategy_id = _build_strategy_context(strategy_id)
     extra_context = strategy_context
+    memory_context, memory_meta = _build_memory_profile_context(memory_profile_id)
+    resolved_memory_profile_id = (memory_meta.get("memory_profile_id") or "").strip()
+    used_memory_resource_ids = memory_meta.get("used_memory_resource_ids") or []
+    skipped_memory_refs = memory_meta.get("skipped_memory_refs") or []
+    if memory_context:
+        if extra_context:
+            extra_context += "\n\n"
+        extra_context += "长期记忆上下文：\n" + memory_context
     crawled_resource_ids: List[str] = []
     crawl_results: List[Dict] = []
     if agent_name == "crawler_agent":
@@ -1654,8 +2805,11 @@ def send_strategy_message(conversation_id: str):
         "usage": usage or {},
         "agent_name": agent_name,
         "strategy_id": resolved_strategy_id,
+        "memory_profile_id": resolved_memory_profile_id,
         "used_resource_ids": used_resource_ids,
         "skipped_resource_refs": skipped_resources,
+        "used_memory_resource_ids": used_memory_resource_ids,
+        "skipped_memory_refs": skipped_memory_refs,
         "crawled_resource_ids": crawled_resource_ids,
         "crawl_results": crawl_results,
         "error": bool(error_text),
@@ -1695,6 +2849,7 @@ def send_strategy_message_stream(conversation_id: str):
     if not isinstance(resource_ids, list):
         resource_ids = []
     strategy_id = (payload.get("strategy_id") or "").strip()
+    memory_profile_id = (payload.get("memory_profile_id") or "").strip()
     prompt_template_id = (payload.get("prompt_template_id") or "").strip()
     prompt_template = (payload.get("prompt_template") or "").strip()
     llm_user_content = _compose_user_content_with_prompt_template(content, prompt_template)
@@ -1725,6 +2880,7 @@ def send_strategy_message_stream(conversation_id: str):
             "resource_ids": resource_ids,
             "agent_name": agent_name,
             "strategy_id": strategy_id,
+            "memory_profile_id": memory_profile_id,
             "prompt_template_id": prompt_template_id,
             "prompt_template": prompt_template,
         }
@@ -1737,6 +2893,14 @@ def send_strategy_message_stream(conversation_id: str):
 
     strategy_context, resolved_strategy_id = _build_strategy_context(strategy_id)
     extra_context = strategy_context
+    memory_context, memory_meta = _build_memory_profile_context(memory_profile_id)
+    resolved_memory_profile_id = (memory_meta.get("memory_profile_id") or "").strip()
+    used_memory_resource_ids = memory_meta.get("used_memory_resource_ids") or []
+    skipped_memory_refs = memory_meta.get("skipped_memory_refs") or []
+    if memory_context:
+        if extra_context:
+            extra_context += "\n\n"
+        extra_context += "长期记忆上下文：\n" + memory_context
     crawled_resource_ids: List[str] = []
     crawl_results: List[Dict] = []
     if agent_name == "crawler_agent":
@@ -1809,9 +2973,12 @@ def send_strategy_message_stream(conversation_id: str):
                 "provider": provider,
                 "agent_name": agent_name,
                 "strategy_id": resolved_strategy_id,
+                "memory_profile_id": resolved_memory_profile_id,
                 "usage": usage or {},
                 "used_resource_ids": used_resource_ids,
                 "skipped_resource_refs": skipped_resources,
+                "used_memory_resource_ids": used_memory_resource_ids,
+                "skipped_memory_refs": skipped_memory_refs,
                 "crawled_resource_ids": crawled_resource_ids,
                 "crawl_results": crawl_results,
                 "error": True,
@@ -1835,8 +3002,11 @@ def send_strategy_message_stream(conversation_id: str):
                 "provider": provider,
                 "agent_name": agent_name,
                 "strategy_id": resolved_strategy_id,
+                "memory_profile_id": resolved_memory_profile_id,
                 "used_resource_ids": used_resource_ids,
                 "skipped_resource_refs": skipped_resources,
+                "used_memory_resource_ids": used_memory_resource_ids,
+                "skipped_memory_refs": skipped_memory_refs,
                 "crawled_resource_ids": crawled_resource_ids,
                 "crawl_results": crawl_results,
             },
@@ -1861,9 +3031,12 @@ def send_strategy_message_stream(conversation_id: str):
             "provider": provider,
             "agent_name": agent_name,
             "strategy_id": resolved_strategy_id,
+            "memory_profile_id": resolved_memory_profile_id,
             "usage": usage or {},
             "used_resource_ids": used_resource_ids,
             "skipped_resource_refs": skipped_resources,
+            "used_memory_resource_ids": used_memory_resource_ids,
+            "skipped_memory_refs": skipped_memory_refs,
             "crawled_resource_ids": crawled_resource_ids,
             "crawl_results": crawl_results,
             "error": bool(error_text),
