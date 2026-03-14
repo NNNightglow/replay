@@ -525,7 +525,9 @@ class ApiService {
   }
 
   static async extractMemoryPortraitDraft(profileId) {
-    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/extract-portrait-draft`, {})
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/extract-portrait-draft`, {}, {
+      timeout: LONG_TASK_TIMEOUT_MS
+    })
   }
 
   static async getMemoryPortrait(profileId) {
@@ -534,6 +536,14 @@ class ApiService {
 
   static async updateMemoryPortrait(profileId, payload = {}) {
     return api.patch(`/api/strategy-watch/memory-profiles/${profileId}/portrait`, payload)
+  }
+
+  static async exportMemoryPortrait(profileId, payload = {}) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/portrait/export`, payload, {
+      responseType: 'blob',
+      hideLoading: true,
+      timeout: LONG_TASK_TIMEOUT_MS
+    })
   }
 
   static async previewMemoryProfileContext(profileId) {

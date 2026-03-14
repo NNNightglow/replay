@@ -841,6 +841,22 @@
             >
               保存侧写
             </el-button>
+            <el-dropdown
+              trigger="click"
+              :disabled="!memoryManageProfileId"
+              @command="exportMemoryPortrait"
+            >
+              <el-button size="small">
+                导出侧写
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="md">导出 Markdown</el-dropdown-item>
+                  <el-dropdown-item command="docx">导出 Word</el-dropdown-item>
+                  <el-dropdown-item command="pdf">导出 PDF</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <el-button
               size="small"
               :disabled="!memoryManageProfileId"
@@ -1482,6 +1498,37 @@ const saveMemoryPortrait = async () => {
     await loadMemoryProfiles()
     await loadMemoryPreviewContext()
     ElMessage.success('长期记忆侧写已保存')
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const exportMemoryPortrait = async (format) => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  const fmt = String(format || 'md').trim().toLowerCase()
+  if (!pid || !['md', 'docx', 'pdf'].includes(fmt)) return
+  try {
+    const blob = await ApiService.exportMemoryPortrait(pid, {
+      format: fmt,
+      portrait: {
+        methodology: memoryPortraitForm.value.methodology,
+        tactics: memoryPortraitForm.value.tactics,
+        views: memoryPortraitForm.value.views,
+        operations: memoryPortraitForm.value.operations,
+        risk_rules: memoryPortraitForm.value.risk_rules,
+        style_constraints: memoryPortraitForm.value.style_constraints
+      }
+    })
+    const profileName = currentMemoryProfile.value?.name || 'memory_portrait'
+    const filename = buildSafeFilename(`${profileName}_人物侧写`, fmt)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
   } catch (error) {
     console.error(error)
   }
@@ -3331,8 +3378,19 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   min-height: 0;
 }
 
+.chat-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-card :deep(.el-card__header) {
+  flex-shrink: 0;
+}
+
 .chat-card :deep(.el-card__body) {
-  height: calc(100% - 16px);
+  flex: 1;
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3555,18 +3613,26 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
+  padding-top: 6px;
+  border-top: 1px solid #ebedf1;
 }
 
 .composer-tools {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .composer-input {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  align-items: end;
+  align-items: start;
+}
+
+.composer-input .el-button {
+  align-self: start;
 }
 
 .prompt-edit-btn {
@@ -4079,7 +4145,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   }
 
   .composer-tools {
-    flex-direction: column;
+    flex-wrap: wrap;
   }
 
   .header-actions {
@@ -4122,6 +4188,16 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
   .key-chart-panel {
     min-width: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .composer-input {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-input .el-button {
+    width: 100%;
   }
 }
 </style>

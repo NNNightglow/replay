@@ -9,6 +9,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from io import BytesIO
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -1076,6 +1077,231 @@ def _build_memory_profile_context(memory_profile_id: str) -> Tuple[str, Dict[str
     }
 
 
+def _memory_portrait_sections(portrait: Dict) -> List[Tuple[str, str]]:
+    source = portrait if isinstance(portrait, dict) else {}
+    return [
+        ("交易方法论", str(source.get("methodology") or "").strip()),
+        ("交易手法", str(source.get("tactics") or "").strip()),
+        ("观点", str(source.get("views") or "").strip()),
+        ("交易操作", str(source.get("operations") or "").strip()),
+        ("风控规则", str(source.get("risk_rules") or "").strip()),
+        ("风格约束", str(source.get("style_constraints") or "").strip()),
+    ]
+
+
+def _merge_portrait_override(base_portrait: Dict, override: Any) -> Dict:
+    merged = dict(base_portrait or {})
+    if not isinstance(override, dict):
+        return merged
+    key_map = {
+        "methodology": "methodology",
+        "tactics": "tactics",
+        "views": "views",
+        "operations": "operations",
+        "risk_rules": "risk_rules",
+        "style_constraints": "style_constraints",
+        "交易方法论": "methodology",
+        "交易手法": "tactics",
+        "观点": "views",
+        "交易操作": "operations",
+        "风控规则": "risk_rules",
+        "风格约束": "style_constraints",
+    }
+    for raw_key, value in override.items():
+        key = key_map.get(str(raw_key).strip())
+        if key:
+            merged[key] = str(value or "").strip()
+    return merged
+
+
+def _build_memory_portrait_markdown(profile: Dict, portrait: Dict) -> str:
+    name = (profile.get("name") or "").strip() or "未命名人格"
+    profile_id = (profile.get("id") or "").strip()
+    description = (profile.get("description") or "").strip()
+    source_blogger = (profile.get("source_blogger") or "").strip()
+    updated_at = (portrait.get("updated_at") or "").strip()
+    updated_by = (portrait.get("updated_by") or "").strip()
+
+    lines: List[str] = [
+        f"# 人物侧写：{name}",
+        "",
+        f"- 人格ID: {profile_id or '--'}",
+        f"- 导出时间(UTC): {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}",
+        f"- 侧写更新时间: {updated_at or '--'}",
+        f"- 侧写来源: {updated_by or '--'}",
+    ]
+    if description:
+        lines.append(f"- 人格说明: {description}")
+    if source_blogger:
+        lines.append(f"- 来源博主: {source_blogger}")
+    lines.append("")
+
+    for title, body in _memory_portrait_sections(portrait):
+        lines.append(f"## {title}")
+        lines.append(body or "（空）")
+        lines.append("")
+
+    evidence_refs = portrait.get("evidence_refs") if isinstance(portrait.get("evidence_refs"), list) else []
+    if evidence_refs:
+        lines.append("## 证据引用")
+        for idx, item in enumerate(evidence_refs, start=1):
+            if not isinstance(item, dict):
+                continue
+            rid = str(item.get("resource_id") or "--").strip() or "--"
+            topic = str(item.get("topic") or "--").strip() or "--"
+            quote = str(item.get("quote") or "").strip()
+            source_time = str(item.get("source_time") or "").strip()
+            source_type = str(item.get("source_time_type") or "").strip()
+            timecode = str(item.get("timecode") or "").strip()
+            lines.append(f"{idx}. [{topic}] 资源: {rid}")
+            if quote:
+                lines.append(f"   - 引文: {quote}")
+            if source_time:
+                lines.append(f"   - 时间: {source_time} ({source_type or 'unknown'})")
+            if timecode:
+                lines.append(f"   - 片段: {timecode}")
+        lines.append("")
+
+    return "\n".join(lines).strip() + "\n"
+
+
+def _resolve_portrait_pdf_font() -> Tuple[str, Optional[Path]]:
+    candidates = [
+        Path("C:/Windows/Fonts/msyh.ttc"),
+        Path("C:/Windows/Fonts/msyh.ttf"),
+        Path("C:/Windows/Fonts/msyhbd.ttc"),
+        Path("C:/Windows/Fonts/msyhbd.ttf"),
+        Path("C:/Windows/Fonts/simhei.ttf"),
+        Path("C:/Windows/Fonts/simsun.ttc"),
+    ]
+    for path in candidates:
+        if path.exists():
+            return "PortraitFont", path
+    return "Helvetica", None
+
+
+def _render_memory_portrait_docx(profile: Dict, portrait: Dict) -> bytes:
+    try:
+        from docx import Document
+    except Exception as exc:
+        raise RuntimeError("缺少 Word 导出依赖 python-docx") from exc
+
+    doc = Document()
+    name = (profile.get("name") or "").strip() or "未命名人格"
+    doc.add_heading(f"人物侧写：{name}", level=1)
+    doc.add_paragraph(f"人格ID：{(profile.get('id') or '').strip() or '--'}")
+    doc.add_paragraph(f"导出时间(UTC)：{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}")
+    doc.add_paragraph(f"侧写更新时间：{(portrait.get('updated_at') or '').strip() or '--'}")
+    doc.add_paragraph(f"侧写来源：{(portrait.get('updated_by') or '').strip() or '--'}")
+    if (profile.get("description") or "").strip():
+        doc.add_paragraph(f"人格说明：{(profile.get('description') or '').strip()}")
+    if (profile.get("source_blogger") or "").strip():
+        doc.add_paragraph(f"来源博主：{(profile.get('source_blogger') or '').strip()}")
+    doc.add_paragraph("")
+
+    for title, body in _memory_portrait_sections(portrait):
+        doc.add_heading(title, level=2)
+        for line in (body or "（空）").splitlines():
+            doc.add_paragraph(line)
+
+    evidence_refs = portrait.get("evidence_refs") if isinstance(portrait.get("evidence_refs"), list) else []
+    if evidence_refs:
+        doc.add_heading("证据引用", level=2)
+        for idx, item in enumerate(evidence_refs, start=1):
+            if not isinstance(item, dict):
+                continue
+            rid = str(item.get("resource_id") or "--").strip() or "--"
+            topic = str(item.get("topic") or "--").strip() or "--"
+            quote = str(item.get("quote") or "").strip()
+            source_time = str(item.get("source_time") or "").strip()
+            source_type = str(item.get("source_time_type") or "").strip()
+            timecode = str(item.get("timecode") or "").strip()
+            doc.add_paragraph(f"{idx}. [{topic}] 资源: {rid}")
+            if quote:
+                doc.add_paragraph(f"引文: {quote}")
+            if source_time:
+                doc.add_paragraph(f"时间: {source_time} ({source_type or 'unknown'})")
+            if timecode:
+                doc.add_paragraph(f"片段: {timecode}")
+
+    out = BytesIO()
+    doc.save(out)
+    return out.getvalue()
+
+
+def _render_memory_portrait_pdf(profile: Dict, portrait: Dict) -> bytes:
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
+    except Exception as exc:
+        raise RuntimeError("缺少 PDF 导出依赖 reportlab") from exc
+
+    font_name, font_path = _resolve_portrait_pdf_font()
+    if font_path:
+        try:
+            pdfmetrics.registerFont(TTFont(font_name, str(font_path)))
+        except Exception:
+            font_name = "Helvetica"
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("portrait_title", parent=styles["Heading1"], fontName=font_name, fontSize=16, leading=20, spaceAfter=10)
+    h2_style = ParagraphStyle("portrait_h2", parent=styles["Heading2"], fontName=font_name, fontSize=13, leading=18, spaceAfter=6)
+    body_style = ParagraphStyle("portrait_body", parent=styles["Normal"], fontName=font_name, fontSize=10.5, leading=16, spaceAfter=3)
+    meta_style = ParagraphStyle("portrait_meta", parent=styles["Normal"], fontName=font_name, fontSize=9, leading=13, textColor="#5a6570", spaceAfter=2)
+
+    def _safe(text: str) -> str:
+        return str(text or "").replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    story: List[Any] = []
+    name = (profile.get("name") or "").strip() or "未命名人格"
+    story.append(Paragraph(_safe(f"人物侧写：{name}"), title_style))
+    story.append(Paragraph(_safe(f"人格ID：{(profile.get('id') or '').strip() or '--'}"), meta_style))
+    story.append(Paragraph(_safe(f"导出时间(UTC)：{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}"), meta_style))
+    story.append(Paragraph(_safe(f"侧写更新时间：{(portrait.get('updated_at') or '').strip() or '--'}"), meta_style))
+    story.append(Paragraph(_safe(f"侧写来源：{(portrait.get('updated_by') or '').strip() or '--'}"), meta_style))
+    if (profile.get("description") or "").strip():
+        story.append(Paragraph(_safe(f"人格说明：{(profile.get('description') or '').strip()}"), meta_style))
+    if (profile.get("source_blogger") or "").strip():
+        story.append(Paragraph(_safe(f"来源博主：{(profile.get('source_blogger') or '').strip()}"), meta_style))
+    story.append(Spacer(1, 8))
+
+    for title, body in _memory_portrait_sections(portrait):
+        story.append(Paragraph(_safe(title), h2_style))
+        text = body or "（空）"
+        for line in text.splitlines():
+            story.append(Paragraph(_safe(line), body_style))
+        story.append(Spacer(1, 4))
+
+    evidence_refs = portrait.get("evidence_refs") if isinstance(portrait.get("evidence_refs"), list) else []
+    if evidence_refs:
+        story.append(Paragraph(_safe("证据引用"), h2_style))
+        for idx, item in enumerate(evidence_refs, start=1):
+            if not isinstance(item, dict):
+                continue
+            rid = str(item.get("resource_id") or "--").strip() or "--"
+            topic = str(item.get("topic") or "--").strip() or "--"
+            quote = str(item.get("quote") or "").strip()
+            source_time = str(item.get("source_time") or "").strip()
+            source_type = str(item.get("source_time_type") or "").strip()
+            timecode = str(item.get("timecode") or "").strip()
+            story.append(Paragraph(_safe(f"{idx}. [{topic}] 资源: {rid}"), body_style))
+            if quote:
+                story.append(Paragraph(_safe(f"引文: {quote}"), body_style))
+            if source_time:
+                story.append(Paragraph(_safe(f"时间: {source_time} ({source_type or 'unknown'})"), body_style))
+            if timecode:
+                story.append(Paragraph(_safe(f"片段: {timecode}"), body_style))
+        story.append(Spacer(1, 4))
+
+    out = BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=A4, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36, title=name, author="strategy_watch")
+    doc.build(story)
+    return out.getvalue()
+
+
 def _bind_resources_to_profile(
     profile_id: str,
     resource_ids: List[str],
@@ -1182,15 +1408,27 @@ def _extract_json_block(text: str) -> Dict:
     if not text:
         return {}
     cleaned = text.strip()
+    import re
+
+    # Try plain JSON first.
     try:
-        if cleaned.startswith("```"):
-            cleaned = cleaned.strip("`").strip()
-        if cleaned.startswith("{") and cleaned.endswith("}"):
-            return json.loads(cleaned)
+        parsed = json.loads(cleaned)
+        if isinstance(parsed, dict):
+            return parsed
     except Exception:
         pass
 
-    import re
+    # Handle fenced code block content like ```json ... ```.
+    if cleaned.startswith("```"):
+        lines = cleaned.splitlines()
+        if len(lines) >= 3 and lines[0].startswith("```") and lines[-1].strip().startswith("```"):
+            body = "\n".join(lines[1:-1]).strip()
+            try:
+                parsed = json.loads(body)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
 
     fenced = re.search(r"```json\\s*({[\\s\\S]*?})\\s*```", text, re.IGNORECASE)
     if fenced:
@@ -1207,6 +1445,48 @@ def _extract_json_block(text: str) -> Dict:
             return {}
 
     return {}
+
+
+def _normalize_portrait_draft_payload(parsed: Dict, reply: str = "") -> Dict:
+    if not isinstance(parsed, dict):
+        parsed = {}
+
+    key_alias = {
+        "交易方法论": "methodology",
+        "交易手法": "tactics",
+        "观点": "views",
+        "交易操作": "operations",
+        "风控规则": "risk_rules",
+        "风格约束": "style_constraints",
+        "evidence_refs": "evidence_refs",
+    }
+    normalized: Dict[str, Any] = {}
+    for raw_key, value in parsed.items():
+        key = key_alias.get(str(raw_key).strip(), str(raw_key).strip())
+        normalized[key] = value
+
+    # Some models put the full JSON object string inside "methodology".
+    nested_text = normalized.get("methodology")
+    has_other_sections = any(
+        str(normalized.get(k) or "").strip()
+        for k in ("tactics", "views", "operations", "risk_rules", "style_constraints")
+    )
+    if isinstance(nested_text, str) and nested_text.strip() and not has_other_sections:
+        nested = _extract_json_block(nested_text)
+        if isinstance(nested, dict) and nested:
+            nested_norm = _normalize_portrait_draft_payload(nested, "")
+            if any(
+                str(nested_norm.get(k) or "").strip()
+                for k in ("tactics", "views", "operations", "risk_rules", "style_constraints")
+            ):
+                normalized = nested_norm
+
+    if not normalized and reply:
+        fallback = _extract_json_block(reply)
+        if isinstance(fallback, dict) and fallback:
+            normalized = _normalize_portrait_draft_payload(fallback, "")
+
+    return normalized
 
 
 def _build_visualization_prompt(goal: str, view_type: str = "") -> str:
@@ -1533,6 +1813,21 @@ def _attach_crawl_relpaths(crawl_results: List[Dict]) -> List[Dict]:
             cloned[rel_key] = rel
         normalized.append(cloned)
     return normalized
+
+
+def _build_crawler_agent_summary(crawl_results: List[Dict]) -> str:
+    total = len(crawl_results or [])
+    ok_count = sum(1 for item in (crawl_results or []) if (item or {}).get("status") == "ok")
+    fail_count = max(total - ok_count, 0)
+    lines = [f"抓取任务完成：共 {total} 条，成功 {ok_count} 条，失败 {fail_count} 条。"]
+    if not total:
+        lines.append("未识别到可抓取链接，请检查输入内容是否包含公众号文章 URL。")
+        return "\n".join(lines)
+    for idx, item in enumerate(crawl_results, start=1):
+        title = (item or {}).get("title") or (item or {}).get("url") or f"抓取文章{idx}"
+        status = "成功" if (item or {}).get("status") == "ok" else "失败"
+        lines.append(f"{idx}. {title}（{status}）")
+    return "\n".join(lines)
 
 
 def _summarize_resource_groups(resources: List[Dict]) -> List[Dict]:
@@ -2443,6 +2738,10 @@ def extract_memory_portrait_draft(profile_id: str):
         f"人格说明: {(profile.get('description') or '').strip()}\n"
         f"来源博主: {(profile.get('source_blogger') or '').strip()}"
     )
+    portrait_model = (
+        (os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip()
+        or "deepseek-v3.2-thinking"
+    )
     try:
         reply, _model, _provider, _usage = chat_with_agent(
             agent_name="data_processing_agent",
@@ -2450,13 +2749,13 @@ def extract_memory_portrait_draft(profile_id: str):
             history_messages=[],
             resource_context=snippets,
             extra_context=extra_context,
-            model_name="",
+            model_name=portrait_model,
             temperature=0.2,
         )
     except Exception as exc:
         return jsonify({"success": False, "error": f"侧写初稿生成失败: {exc}", "timestamp": _now_iso()}), 500
 
-    parsed = _extract_json_block(reply)
+    parsed = _normalize_portrait_draft_payload(_extract_json_block(reply), reply)
     if not parsed:
         parsed = {"methodology": reply}
 
@@ -2566,6 +2865,52 @@ def update_memory_portrait(profile_id: str):
         _save_memory_profiles_payload(profiles_payload)
 
     return jsonify({"success": True, "data": portrait, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/portrait/export", methods=["POST"])
+def export_memory_portrait(profile_id: str):
+    payload = request.get_json(silent=True) or {}
+    export_format = (payload.get("format") or request.args.get("format") or "md").strip().lower()
+    if export_format not in {"md", "docx", "pdf"}:
+        return jsonify({"success": False, "error": "仅支持导出 md/docx/pdf。", "timestamp": _now_iso()}), 400
+
+    with _STORE_LOCK:
+        profiles_payload = _load_memory_profiles_payload()
+        profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
+        if not profile:
+            return jsonify({"success": False, "error": "人格不存在。", "timestamp": _now_iso()}), 404
+        portrait_map = _load_memory_portraits()
+        stored_portrait = portrait_map.get(profile_id) or _default_memory_portrait(profile_id)
+
+    portrait = _merge_portrait_override(stored_portrait, payload.get("portrait"))
+    markdown_text = _build_memory_portrait_markdown(profile, portrait)
+
+    profile_name = (profile.get("name") or profile_id).strip() or profile_id
+    base_name = secure_filename(profile_name) or profile_id
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+
+    try:
+        if export_format == "md":
+            content = markdown_text.encode("utf-8")
+            mimetype = "text/markdown; charset=utf-8"
+            ext = "md"
+        elif export_format == "docx":
+            content = _render_memory_portrait_docx(profile, portrait)
+            mimetype = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+            ext = "docx"
+        else:
+            content = _render_memory_portrait_pdf(profile, portrait)
+            mimetype = "application/pdf"
+            ext = "pdf"
+    except Exception as exc:
+        return jsonify({"success": False, "error": f"导出失败: {exc}", "timestamp": _now_iso()}), 500
+
+    return send_file(
+        BytesIO(content),
+        as_attachment=True,
+        download_name=f"{base_name}_portrait_{stamp}.{ext}",
+        mimetype=mimetype,
+    )
 
 
 @strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/preview-context", methods=["GET"])
@@ -2736,6 +3081,59 @@ def send_strategy_message(conversation_id: str):
         conv["updated_at"] = _now_iso()
         _save_conversations(conversations)
 
+    crawled_resource_ids: List[str] = []
+    crawl_results: List[Dict] = []
+    if agent_name == "crawler_agent":
+        crawl_results = crawl_wechat_articles_from_text(
+            content,
+            output_dir=CRAWLED_DIR,
+            cookie_override=crawler_cookie,
+        )
+        crawl_results = _attach_crawl_relpaths(crawl_results)
+        ok_items = [x for x in crawl_results if x.get("status") == "ok"]
+        if ok_items:
+            with _STORE_LOCK:
+                crawled_resource_ids = _register_crawled_resources(ok_items)
+        assistant_message = {
+            "id": _gen_id("msg"),
+            "role": "assistant",
+            "content": _build_crawler_agent_summary(crawl_results),
+            "created_at": _now_iso(),
+            "model": "crawler_direct",
+            "provider": "crawler",
+            "usage": {},
+            "agent_name": agent_name,
+            "strategy_id": strategy_id,
+            "memory_profile_id": memory_profile_id,
+            "used_resource_ids": [],
+            "skipped_resource_refs": [],
+            "used_memory_resource_ids": [],
+            "skipped_memory_refs": [],
+            "crawled_resource_ids": crawled_resource_ids,
+            "crawl_results": crawl_results,
+            "error": False,
+            "error_message": "",
+        }
+        with _STORE_LOCK:
+            conversations = _load_conversations()
+            conv = _find_by_id(conversations, conversation_id)
+            if conv:
+                conv.setdefault("messages", []).append(assistant_message)
+                conv["updated_at"] = _now_iso()
+                _save_conversations(conversations)
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "conversation_id": conversation_id,
+                    "user_message": user_message,
+                    "assistant_message": assistant_message,
+                    "crawl_results": crawl_results,
+                },
+                "timestamp": _now_iso(),
+            }
+        )
+
     resource_context, used_resource_ids, skipped_resources = _build_resource_context(resource_ids)
     history_for_conversation = conv.get("messages", [])[-MAX_HISTORY_MESSAGES:]
 
@@ -2749,29 +3147,6 @@ def send_strategy_message(conversation_id: str):
         if extra_context:
             extra_context += "\n\n"
         extra_context += "长期记忆上下文：\n" + memory_context
-    crawled_resource_ids: List[str] = []
-    crawl_results: List[Dict] = []
-    if agent_name == "crawler_agent":
-        crawl_results = crawl_wechat_articles_from_text(
-            content,
-            output_dir=CRAWLED_DIR,
-            cookie_override=crawler_cookie,
-        )
-        crawl_results = _attach_crawl_relpaths(crawl_results)
-        ok_items = [x for x in crawl_results if x.get("status") == "ok"]
-        fail_items = [x for x in crawl_results if x.get("status") != "ok"]
-        if ok_items:
-            with _STORE_LOCK:
-                crawled_resource_ids = _register_crawled_resources(ok_items)
-            success_lines = [f"- {x.get('title') or x.get('url')}" for x in ok_items]
-            if extra_context:
-                extra_context += "\n\n"
-            extra_context += "已抓取并保存的公众号文章：\n" + "\n".join(success_lines)
-        if fail_items:
-            fail_lines = [f"- {x.get('url')}: {x.get('error')}" for x in fail_items]
-            if extra_context:
-                extra_context += "\n\n"
-            extra_context += "抓取失败：\n" + "\n".join(fail_lines)
 
     assistant_text = ""
     error_text = ""
@@ -2888,6 +3263,92 @@ def send_strategy_message_stream(conversation_id: str):
         conv["updated_at"] = _now_iso()
         _save_conversations(conversations)
 
+    crawled_resource_ids: List[str] = []
+    crawl_results: List[Dict] = []
+    if agent_name == "crawler_agent":
+        crawl_results = crawl_wechat_articles_from_text(
+            content,
+            output_dir=CRAWLED_DIR,
+            cookie_override=crawler_cookie,
+        )
+        crawl_results = _attach_crawl_relpaths(crawl_results)
+        ok_items = [x for x in crawl_results if x.get("status") == "ok"]
+        if ok_items:
+            with _STORE_LOCK:
+                crawled_resource_ids = _register_crawled_resources(ok_items)
+
+        assistant_message_id = _gen_id("msg")
+        assistant_created_at = _now_iso()
+        assistant_text = _build_crawler_agent_summary(crawl_results)
+        assistant_message = {
+            "id": assistant_message_id,
+            "role": "assistant",
+            "content": assistant_text,
+            "created_at": assistant_created_at,
+            "model": "crawler_direct",
+            "provider": "crawler",
+            "agent_name": agent_name,
+            "strategy_id": strategy_id,
+            "memory_profile_id": memory_profile_id,
+            "usage": {},
+            "used_resource_ids": [],
+            "skipped_resource_refs": [],
+            "used_memory_resource_ids": [],
+            "skipped_memory_refs": [],
+            "crawled_resource_ids": crawled_resource_ids,
+            "crawl_results": crawl_results,
+            "error": False,
+            "error_message": "",
+        }
+
+        def _crawler_sse(data: Dict) -> str:
+            return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+        def generate_crawler():
+            yield _crawler_sse(
+                {
+                    "type": "meta",
+                    "conversation_id": conversation_id,
+                    "user_message": user_message,
+                    "assistant_message": {
+                        "id": assistant_message_id,
+                        "role": "assistant",
+                        "content": "",
+                        "created_at": assistant_created_at,
+                        "model": "crawler_direct",
+                        "provider": "crawler",
+                        "agent_name": agent_name,
+                        "strategy_id": strategy_id,
+                        "memory_profile_id": memory_profile_id,
+                        "used_resource_ids": [],
+                        "skipped_resource_refs": [],
+                        "used_memory_resource_ids": [],
+                        "skipped_memory_refs": [],
+                        "crawled_resource_ids": crawled_resource_ids,
+                        "crawl_results": crawl_results,
+                    },
+                }
+            )
+            if assistant_text:
+                yield _crawler_sse({"type": "delta", "text": assistant_text})
+            with _STORE_LOCK:
+                conversations = _load_conversations()
+                conv = _find_by_id(conversations, conversation_id)
+                if conv:
+                    conv.setdefault("messages", []).append(assistant_message)
+                    conv["updated_at"] = _now_iso()
+                    _save_conversations(conversations)
+            yield _crawler_sse({"type": "done"})
+
+        return Response(
+            stream_with_context(generate_crawler()),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     resource_context, used_resource_ids, skipped_resources = _build_resource_context(resource_ids)
     history_for_conversation = conv.get("messages", [])[-MAX_HISTORY_MESSAGES:]
 
@@ -2901,29 +3362,6 @@ def send_strategy_message_stream(conversation_id: str):
         if extra_context:
             extra_context += "\n\n"
         extra_context += "长期记忆上下文：\n" + memory_context
-    crawled_resource_ids: List[str] = []
-    crawl_results: List[Dict] = []
-    if agent_name == "crawler_agent":
-        crawl_results = crawl_wechat_articles_from_text(
-            content,
-            output_dir=CRAWLED_DIR,
-            cookie_override=crawler_cookie,
-        )
-        crawl_results = _attach_crawl_relpaths(crawl_results)
-        ok_items = [x for x in crawl_results if x.get("status") == "ok"]
-        fail_items = [x for x in crawl_results if x.get("status") != "ok"]
-        if ok_items:
-            with _STORE_LOCK:
-                crawled_resource_ids = _register_crawled_resources(ok_items)
-            success_lines = [f"- {x.get('title') or x.get('url')}" for x in ok_items]
-            if extra_context:
-                extra_context += "\n\n"
-            extra_context += "已抓取并保存的公众号文章：\n" + "\n".join(success_lines)
-        if fail_items:
-            fail_lines = [f"- {x.get('url')}: {x.get('error')}" for x in fail_items]
-            if extra_context:
-                extra_context += "\n\n"
-            extra_context += "抓取失败：\n" + "\n".join(fail_lines)
 
     assistant_message_id = _gen_id("msg")
     assistant_created_at = _now_iso()
