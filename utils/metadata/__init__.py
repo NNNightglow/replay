@@ -8,8 +8,10 @@
 
 from .sector_data_manager import SectorDataManager
 from .data_processor import DataProcessor
+from .index_weight_manager import IndexWeightManager
 
 __all__ = [
     'SectorDataManager',
-    'DataProcessor'
+    'DataProcessor',
+    'IndexWeightManager',
 ]

@@ -625,7 +625,6 @@ def get_stock_levels():
       - code: 股票代码（必填，6位）
       - date: 日期(YYYY-MM-DD)，缺省为最新交易日（以全局market_states最大日期推断）
       - window: 窗口天数，默认3650（近十年）
-      - method_ver: 算法版本，默认'v2'
     """
     try:
         stock_code = request.args.get('code')
@@ -633,7 +632,6 @@ def get_stock_levels():
             return jsonify({'success': False, 'message': '缺少参数 code'}), 400
 
         window_days = int(request.args.get('window', 3650))
-        method_ver = request.args.get('method_ver', 'v2')
         date_param = request.args.get('date')
 
         # 解析日期，默认取market_states最大日期
@@ -660,7 +658,6 @@ def get_stock_levels():
             code=str(stock_code),
             date_str=date_str,
             window_days=window_days,
-            method_ver=method_ver
         )
 
         if row is not None:
@@ -678,7 +675,6 @@ def get_stock_levels():
                 'data': {
                     'code': row.get('code'),
                     'window_days': int(row.get('window_days', window_days)),
-                    'method_ver': row.get('method_ver', method_ver),
                     'levels': levels_parsed or [],
                     'ath': row.get('ath'),
                     'current': row.get('current'),
@@ -698,7 +694,6 @@ def get_stock_levels():
             code=str(stock_code),
             selected_date=selected_date,
             window_days=window_days,
-            method_ver=method_ver
         )
 
         # 写入缓存（变化点区间；仅关键位变化时新增）
@@ -707,7 +702,6 @@ def get_stock_levels():
             'code': result['code'],
             'effective_from': result['date'],
             'window_days': result['window_days'],
-            'method_ver': result['method_ver'],
             'levels': json.dumps(result.get('levels', []), ensure_ascii=False),
             'ath': result.get('ath'),
             'current': result.get('current'),

@@ -33,14 +33,13 @@ def read_levels_cache(cache_path: str = DEFAULT_CACHE_PATH) -> pl.DataFrame:
     """读取Parquet缓存文件，不存在则返回空DataFrame。
 
     当前缓存结构（变化点区间）：
-    - code, window_days, method_ver
+    - code, window_days
     - effective_from, effective_to
     - levels(JSON字符串), ath, current, updated_at
     """
     empty_schema = {
         'code': pl.Series([], dtype=pl.Utf8),
         'window_days': pl.Series([], dtype=pl.Int64),
-        'method_ver': pl.Series([], dtype=pl.Utf8),
         'effective_from': pl.Series([], dtype=pl.Utf8),
         'effective_to': pl.Series([], dtype=pl.Utf8),
         'levels': pl.Series([], dtype=pl.Utf8),
@@ -61,7 +60,7 @@ def read_levels_cache(cache_path: str = DEFAULT_CACHE_PATH) -> pl.DataFrame:
                 pl.col('date').alias('effective_to'),
             ])
             keep_cols = [
-                'code', 'window_days', 'method_ver',
+                'code', 'window_days',
                 'effective_from', 'effective_to',
                 'levels', 'ath', 'current', 'updated_at'
             ]
@@ -70,7 +69,6 @@ def read_levels_cache(cache_path: str = DEFAULT_CACHE_PATH) -> pl.DataFrame:
             migrated = migrated.with_columns([
                 pl.col('code').cast(pl.Utf8),
                 pl.col('window_days').cast(pl.Int64),
-                pl.col('method_ver').cast(pl.Utf8),
                 pl.col('effective_from').cast(pl.Utf8),
                 pl.col('effective_to').cast(pl.Utf8),
                 pl.col('levels').cast(pl.Utf8),
@@ -85,10 +83,9 @@ def read_levels_cache(cache_path: str = DEFAULT_CACHE_PATH) -> pl.DataFrame:
         for col_name, series in empty_schema.items():
             if col_name not in df.columns:
                 df = df.with_columns(pl.lit(None, dtype=series.dtype).alias(col_name))
-        return df.select(list(empty_schema.keys())).with_columns([
+        out = df.select(list(empty_schema.keys())).with_columns([
             pl.col('code').cast(pl.Utf8),
             pl.col('window_days').cast(pl.Int64),
-            pl.col('method_ver').cast(pl.Utf8),
             pl.col('effective_from').cast(pl.Utf8),
             pl.col('effective_to').cast(pl.Utf8),
             pl.col('levels').cast(pl.Utf8),
@@ -96,6 +93,13 @@ def read_levels_cache(cache_path: str = DEFAULT_CACHE_PATH) -> pl.DataFrame:
             pl.col('current').cast(pl.Float64, strict=False),
             pl.col('updated_at').cast(pl.Utf8),
         ])
+        # 兼容旧版 method_ver 并存的数据：去掉版本维度后按区间去重，保留最新 updated_at
+        out = out.sort('updated_at').unique(
+            subset=['code', 'window_days', 'effective_from', 'effective_to'],
+            keep='last',
+            maintain_order=True,
+        )
+        return out
     except Exception:
         # 若损坏则返回空
         return pl.DataFrame(empty_schema)
@@ -105,7 +109,7 @@ def write_levels_cache(record: Dict[str, Any], cache_path: str = DEFAULT_CACHE_P
     """写入关键位变化点缓存（仅关键位变化时新增区间）。
 
     record 必须包含:
-    - code, effective_from(YYYY-MM-DD), window_days, method_ver
+    - code, effective_from(YYYY-MM-DD), window_days
     - levels(JSON字符串或list), ath, current, updated_at
     """
     _ensure_parent_dir(cache_path)
@@ -117,7 +121,6 @@ def write_levels_cache(record: Dict[str, Any], cache_path: str = DEFAULT_CACHE_P
         raise ValueError('write_levels_cache requires effective_from')
     date_str = str(effective_from)
     window_days = int(record['window_days'])
-    method_ver = str(record['method_ver'])
     updated_at = str(record.get('updated_at', ''))
     ath = record.get('ath')
     current = record.get('current')
@@ -135,7 +138,6 @@ def write_levels_cache(record: Dict[str, Any], cache_path: str = DEFAULT_CACHE_P
     rec_base = {
         'code': code,
         'window_days': window_days,
-        'method_ver': method_ver,
         'levels': normalized_levels_str,
         'ath': ath,
         'current': current,
@@ -147,7 +149,7 @@ def write_levels_cache(record: Dict[str, Any], cache_path: str = DEFAULT_CACHE_P
             'effective_from': date_str,
             'effective_to': None,
         }]).select([
-            'code', 'window_days', 'method_ver',
+            'code', 'window_days',
             'effective_from', 'effective_to',
             'levels', 'ath', 'current', 'updated_at'
         ])
@@ -156,8 +158,7 @@ def write_levels_cache(record: Dict[str, Any], cache_path: str = DEFAULT_CACHE_P
 
     key_mask = (
         (pl.col('code') == code) &
-        (pl.col('window_days') == window_days) &
-        (pl.col('method_ver') == method_ver)
+        (pl.col('window_days') == window_days)
     )
     key_df = df.filter(key_mask).sort('effective_from')
     other_df = df.filter(~key_mask)
@@ -240,7 +241,6 @@ def get_levels_cache_for_date(
     code: str,
     date_str: str,
     window_days: int,
-    method_ver: str
 ) -> Optional[Dict[str, Any]]:
     """按日期命中变化点区间缓存。"""
     if cache_df is None or cache_df.is_empty():
@@ -248,7 +248,6 @@ def get_levels_cache_for_date(
     matched = cache_df.filter(
         (pl.col('code') == str(code).zfill(6)) &
         (pl.col('window_days') == int(window_days)) &
-        (pl.col('method_ver') == str(method_ver)) &
         (pl.col('effective_from') <= date_str) &
         (
             pl.col('effective_to').is_null() |
@@ -265,7 +264,6 @@ def compute_key_levels_from_market_states(
     code: str,
     selected_date: date,
     window_days: int = 3650,
-    method_ver: str = 'v2'
 ) -> Dict[str, Any]:
     """按“关键日”规则计算关键位（关键位仅取关键日最高价）。
 
@@ -300,7 +298,6 @@ def compute_key_levels_from_market_states(
             'code': code,
             'date': selected_date.strftime('%Y-%m-%d'),
             'window_days': window_days,
-            'method_ver': method_ver,
             'levels': [],
             'ath': None,
             'current': None,
@@ -320,7 +317,6 @@ def compute_key_levels_from_market_states(
             'code': code,
             'date': selected_date.strftime('%Y-%m-%d'),
             'window_days': window_days,
-            'method_ver': method_ver,
             'levels': [],
             'ath': None,
             'current': None,
@@ -334,7 +330,6 @@ def compute_key_levels_from_market_states(
             'code': code,
             'date': selected_date.strftime('%Y-%m-%d'),
             'window_days': window_days,
-            'method_ver': method_ver,
             'levels': [],
             'ath': float(ath) if ath == ath else None,
             'current': float(current_price) if current_price == current_price else None,
@@ -387,7 +382,6 @@ def compute_key_levels_from_market_states(
             'code': code,
             'date': selected_date.strftime('%Y-%m-%d'),
             'window_days': window_days,
-            'method_ver': method_ver,
             'levels': [],
             'ath': float(ath) if ath == ath else None,
             'current': float(current_price) if current_price == current_price else None,
@@ -460,7 +454,6 @@ def compute_key_levels_from_market_states(
         'code': code,
         'date': selected_date.strftime('%Y-%m-%d'),
         'window_days': window_days,
-        'method_ver': method_ver,
         'levels': levels,
         'ath': float(ath) if ath == ath else None,
         'current': float(current_price) if current_price == current_price else None,

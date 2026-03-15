@@ -155,8 +155,8 @@ class ApiService {
     return api.get('/api/stocks/kline', { params })
   }
 
-  static async getStockLevels(stockCode, windowDays = 3650, date = null, methodVer = 'v1') {
-    const params = { code: stockCode, window: windowDays, method_ver: methodVer }
+  static async getStockLevels(stockCode, windowDays = 3650, date = null) {
+    const params = { code: stockCode, window: windowDays }
     if (date) params.date = this.formatDateForAPI(date)
     return api.get('/api/stocks/levels', { params })
   }
@@ -524,8 +524,8 @@ class ApiService {
     })
   }
 
-  static async extractMemoryPortraitDraft(profileId) {
-    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/extract-portrait-draft`, {}, {
+  static async extractMemoryPortraitDraft(profileId, payload = {}) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/extract-portrait-draft`, payload, {
       timeout: LONG_TASK_TIMEOUT_MS
     })
   }

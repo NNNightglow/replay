@@ -825,6 +825,19 @@
 
         <el-tab-pane label="人物侧写" name="portrait">
           <div class="memory-portrait-actions">
+            <el-select
+              v-model="selectedPortraitModel"
+              size="small"
+              style="width: 240px"
+              placeholder="选择侧写模型"
+            >
+              <el-option
+                v-for="model in modelOptions"
+                :key="`portrait_${model.value}`"
+                :label="model.label"
+                :value="model.value"
+              />
+            </el-select>
             <el-button
               size="small"
               type="primary"
@@ -965,12 +978,40 @@ const groupTransferForm = ref({
 })
 
 const selectedAgentName = ref('planner_agent')
-const modelOptions = [
-  { label: 'v3.2 思考', value: 'deepseek-v3.2-thinking' },
-  { label: 'v3.2', value: 'deepseek-v3.2' }
+const DEFAULT_MODEL_OPTIONS = [
+  { label: 'DeepSeek v3.2', value: 'deepseek-v3.2' },
+  { label: 'DeepSeek v3.2 Thinking', value: 'deepseek-v3.2-thinking' },
+  { label: 'DeepSeek v3.1', value: 'deepseek-v3.1' },
+  { label: '通义千问 qwen-max', value: 'qwen-max' },
+  { label: '通义千问 qvq-max', value: 'qvq-max' },
+  { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' }
 ]
+const normalizeModelOptions = (rawOptions = []) => {
+  const out = []
+  const seen = new Set()
+  const arr = Array.isArray(rawOptions) ? rawOptions : []
+  for (const item of arr) {
+    if (!item) continue
+    if (typeof item === 'string') {
+      const value = item.trim()
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      out.push({ label: value, value })
+      continue
+    }
+    const value = String(item.value || item.id || '').trim()
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    const label = String(item.label || item.name || value).trim() || value
+    out.push({ label, value })
+  }
+  return out
+}
+const modelOptions = ref(normalizeModelOptions(DEFAULT_MODEL_OPTIONS))
 const selectedModel = ref('deepseek-v3.2')
-const PROMPT_TEMPLATE_STORAGE_KEY = 'strategy_watch_prompt_templates_v1'
+const selectedPortraitModel = ref('deepseek-v3.2')
+const PROMPT_TEMPLATE_STORAGE_KEY = 'strategy_watch_prompt_templates'
+const LEGACY_PROMPT_TEMPLATE_STORAGE_KEY = 'strategy_watch_prompt_templates_v1'
 const DEFAULT_PROMPT_TEMPLATES = [
   { id: 'none', name: '不使用模板', content: '' },
   {
@@ -1072,7 +1113,6 @@ const keyWatchError = ref('')
 const keyStockSearchQuery = ref('')
 const keyPaneWidthPercent = ref(36)
 const keyLevelWindowDays = ref(3650)
-const keyLevelMethodVer = ref('v1')
 const keyBoardBodyRef = ref(null)
 const keyPaneResizing = ref(false)
 const chatSidebarCollapsed = ref(false)
@@ -1178,12 +1218,16 @@ const loadPromptTemplatesFromStorage = () => {
   if (typeof window === 'undefined') return
   try {
     const raw = window.localStorage.getItem(PROMPT_TEMPLATE_STORAGE_KEY)
+      || window.localStorage.getItem(LEGACY_PROMPT_TEMPLATE_STORAGE_KEY)
     if (!raw) {
       promptTemplates.value = clonePromptTemplates()
       return
     }
     const parsed = JSON.parse(raw)
     promptTemplates.value = normalizePromptTemplates(parsed)
+    if (window.localStorage.getItem(LEGACY_PROMPT_TEMPLATE_STORAGE_KEY)) {
+      window.localStorage.removeItem(LEGACY_PROMPT_TEMPLATE_STORAGE_KEY)
+    }
   } catch (error) {
     console.error(error)
     promptTemplates.value = clonePromptTemplates()
@@ -1470,7 +1514,9 @@ const generateMemoryPortraitDraft = async () => {
   if (!pid) return
   memoryDraftLoading.value = true
   try {
-    const res = await ApiService.extractMemoryPortraitDraft(pid)
+    const res = await ApiService.extractMemoryPortraitDraft(pid, {
+      model: selectedPortraitModel.value || ''
+    })
     applyMemoryPortrait(res.data?.portrait || {})
     await loadMemoryProfiles()
     await loadMemoryPreviewContext()
@@ -1878,7 +1924,6 @@ const hydrateKeyBoardFromStrategy = (strategy) => {
     64
   )
   keyLevelWindowDays.value = Number(board.window_days || 3650) || 3650
-  keyLevelMethodVer.value = (board.method_ver || 'v1').trim() || 'v1'
 }
 
 const persistKeyBoardState = async () => {
@@ -1899,8 +1944,7 @@ const persistKeyBoardState = async () => {
     })),
     selected_code: keySelectedCode.value || '',
     pane_width_percent: keyPaneWidthPercent.value,
-    window_days: keyLevelWindowDays.value,
-    method_ver: keyLevelMethodVer.value
+    window_days: keyLevelWindowDays.value
   }
 
   try {
@@ -2016,7 +2060,7 @@ const loadKeyStockKline = async (stockCode) => {
   try {
     const [klineResp, levelsResp] = await Promise.all([
       ApiService.getStockKline(code, 3650, null, 'data'),
-      ApiService.getStockLevels(code, keyLevelWindowDays.value, null, keyLevelMethodVer.value)
+      ApiService.getStockLevels(code, keyLevelWindowDays.value, null)
     ])
 
     const rows = klineResp?.data?.data?.kline_data || []
@@ -2085,9 +2129,30 @@ const startKeyPaneResize = (event) => {
 const loadRuntime = async () => {
   const res = await ApiService.getStrategyRuntime()
   runtime.value = res.data || runtime.value
+
+  const runtimeOptions = normalizeModelOptions(runtime.value.model_options || [])
+  if (runtimeOptions.length) {
+    modelOptions.value = runtimeOptions
+  }
+
   const candidateModel = runtime.value.model
-  if (candidateModel && modelOptions.some(item => item.value === candidateModel)) {
+  if (candidateModel) {
+    if (!modelOptions.value.some(item => item.value === candidateModel)) {
+      modelOptions.value.push({ label: candidateModel, value: candidateModel })
+    }
     selectedModel.value = candidateModel
+  }
+
+  const candidatePortraitModel = runtime.value.portrait_model || candidateModel
+  if (candidatePortraitModel) {
+    if (!modelOptions.value.some(item => item.value === candidatePortraitModel)) {
+      modelOptions.value.push({ label: candidatePortraitModel, value: candidatePortraitModel })
+    }
+    selectedPortraitModel.value = candidatePortraitModel
+  }
+
+  if (!selectedPortraitModel.value) {
+    selectedPortraitModel.value = selectedModel.value || (modelOptions.value[0]?.value || '')
   }
   if (!selectedAgentName.value && runtime.value.agents?.length) {
     selectedAgentName.value = runtime.value.agents[0].name
@@ -3084,6 +3149,12 @@ watch(memoryManageProfileId, async (nextId) => {
 watch(memoryBindResources, () => {
   const valid = new Set(memoryBindResources.value.map(item => item.id))
   memoryBindSelectedIds.value = memoryBindSelectedIds.value.filter(id => valid.has(id))
+})
+
+watch(selectedModel, (nextVal) => {
+  if (!selectedPortraitModel.value) {
+    selectedPortraitModel.value = nextVal || ''
+  }
 })
 
 watch(activeMemoryProfileId, async (nextId, prevId) => {
@@ -4130,6 +4201,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
   margin-bottom: 10px;
 }
 

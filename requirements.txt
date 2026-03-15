@@ -8,6 +8,9 @@ pyarrow==20.0.0
 akshare==1.17.19
 baostock==0.8.9
 pywencai==0.13.1
+tushare==1.4.25
+bs4==0.0.2
+websocket-client==1.9.0
 
 # Backend server
 Flask==2.3.3

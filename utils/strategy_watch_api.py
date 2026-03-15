@@ -48,6 +48,14 @@ MAX_HISTORY_MESSAGES = 24
 MAX_MEMORY_CONTEXT_CHARS = 40_000
 DEFAULT_GROUP_NAME = "未分组"
 DEFAULT_STRATEGY_VIEW = "basic"
+DEFAULT_MODEL_OPTIONS = [
+    {"label": "DeepSeek v3.2", "value": "deepseek-v3.2"},
+    {"label": "DeepSeek v3.2 Thinking", "value": "deepseek-v3.2-thinking"},
+    {"label": "DeepSeek v3.1", "value": "deepseek-v3.1"},
+    {"label": "Qwen Max", "value": "qwen-max"},
+    {"label": "QVQ Max", "value": "qvq-max"},
+    {"label": "GPT-3.5 Turbo", "value": "gpt-3.5-turbo"},
+]
 
 _DATE_YMD_SEP_PATTERN = re.compile(r"(?<!\d)(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?(?!\d)")
 _DATE_YMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
@@ -56,6 +64,32 @@ _DATE_YYMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)")
 _STORE_LOCK = threading.Lock()
 _JOB_LOCK = threading.Lock()
 _JOBS: Dict[str, Dict] = {}
+
+
+def _canonical_model_name(model_name: str) -> str:
+    raw = (model_name or "").strip()
+    if not raw:
+        return raw
+    lowered = raw.lower()
+    alias_map = {
+        "ds v3.2": "deepseek-v3.2",
+        "ds-v3.2": "deepseek-v3.2",
+        "ds v3.2 thinking": "deepseek-v3.2-thinking",
+        "ds-v3.2-thinking": "deepseek-v3.2-thinking",
+        "ds v3.1": "deepseek-v3.1",
+        "ds-v3.1": "deepseek-v3.1",
+        "deepseek/deepseek-v3.2": "deepseek-v3.2",
+        "deepseek/deepseek-v3.2-thinking": "deepseek-v3.2-thinking",
+        "deepseek/deepseek-v3.1": "deepseek-v3.1",
+        "deepseek/deepseek-v3.1-terminus": "deepseek-v3.1",
+    }
+    if lowered in alias_map:
+        return alias_map[lowered]
+    if lowered.startswith("deepseek/"):
+        tail = raw.split("/", 1)[1].strip()
+        if tail.lower().startswith("deepseek-"):
+            return tail
+    return raw
 
 
 def _load_env_files() -> None:
@@ -80,6 +114,46 @@ def _load_env_files() -> None:
                 value = value[1:-1]
             if key and key not in os.environ:
                 os.environ[key] = value
+
+
+def _get_runtime_model_options() -> List[Dict[str, str]]:
+    env_raw = (os.getenv("OPENAI_MODEL_OPTIONS") or "").strip()
+    parsed: List[Dict[str, str]] = []
+
+    if env_raw:
+        for chunk in env_raw.split(","):
+            token = chunk.strip()
+            if not token:
+                continue
+            if ":" in token:
+                label, value = token.split(":", 1)
+                label = label.strip()
+                value = _canonical_model_name(value.strip())
+                if value:
+                    parsed.append({"label": label or value, "value": value})
+            else:
+                normalized = _canonical_model_name(token)
+                parsed.append({"label": normalized, "value": normalized})
+
+    base = parsed if parsed else list(DEFAULT_MODEL_OPTIONS)
+
+    for extra_value in (
+        _canonical_model_name((os.getenv("OPENAI_MODEL") or "").strip()),
+        _canonical_model_name((os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip()),
+    ):
+        if extra_value:
+            base.append({"label": extra_value, "value": extra_value})
+
+    seen = set()
+    out: List[Dict[str, str]] = []
+    for item in base:
+        value = (item.get("value") or "").strip()
+        if not value or value in seen:
+            continue
+        seen.add(value)
+        label = (item.get("label") or value).strip() or value
+        out.append({"label": label, "value": value})
+    return out
 
 
 def _now_iso() -> str:
@@ -1929,12 +2003,19 @@ def _copy_resource_record(item: Dict, target_group_id: str, target_name: str) ->
 @strategy_watch_bp.route("/api/strategy-watch/runtime", methods=["GET"])
 def strategy_watch_runtime():
     _load_env_files()
+    model_default = _canonical_model_name(os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
+    portrait_model_default = (
+        _canonical_model_name((os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip())
+        or model_default
+    )
     return jsonify(
         {
             "success": True,
             "data": {
                 "base_url": (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1"),
-                "model": (os.getenv("OPENAI_MODEL") or "gpt-4o-mini"),
+                "model": model_default,
+                "portrait_model": portrait_model_default,
+                "model_options": _get_runtime_model_options(),
                 "api_key_configured": bool(
                     (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
                 ),
@@ -2686,6 +2767,7 @@ def sync_memory_profile_group(profile_id: str):
 
 @strategy_watch_bp.route("/api/strategy-watch/memory-profiles/<string:profile_id>/extract-portrait-draft", methods=["POST"])
 def extract_memory_portrait_draft(profile_id: str):
+    payload = request.get_json(silent=True) or {}
     with _STORE_LOCK:
         profiles_payload = _load_memory_profiles_payload()
         profile = _find_by_id(profiles_payload.get("profiles", []), profile_id)
@@ -2738,12 +2820,14 @@ def extract_memory_portrait_draft(profile_id: str):
         f"人格说明: {(profile.get('description') or '').strip()}\n"
         f"来源博主: {(profile.get('source_blogger') or '').strip()}"
     )
-    portrait_model = (
-        (os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip()
-        or "deepseek-v3.2-thinking"
+    requested_model = (payload.get("model") or "").strip()
+    portrait_model = _canonical_model_name(
+        requested_model
+        or (os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip()
+        or "deepseek-v3.2"
     )
     try:
-        reply, _model, _provider, _usage = chat_with_agent(
+        reply, used_model, _provider, _usage = chat_with_agent(
             agent_name="data_processing_agent",
             user_content=prompt,
             history_messages=[],
@@ -2811,6 +2895,7 @@ def extract_memory_portrait_draft(profile_id: str):
             "success": True,
             "data": {
                 "portrait": portrait,
+                "used_model": used_model,
                 "used_resource_ids": used_ids,
                 "skipped_refs": skipped,
             },
@@ -3150,7 +3235,7 @@ def send_strategy_message(conversation_id: str):
 
     assistant_text = ""
     error_text = ""
-    resolved_model = model_name or (os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
+    resolved_model = _canonical_model_name(model_name or (os.getenv("OPENAI_MODEL") or "gpt-4o-mini"))
     provider = ""
     usage = {}
     try:
@@ -3379,8 +3464,22 @@ def send_strategy_message_stream(conversation_id: str):
                 _save_conversations(conversations)
 
     def generate():
+        def _friendly_llm_error(raw_error: str) -> str:
+            text = (raw_error or "").strip() or "unknown error"
+            if "Max context tokens exceeded" in text or "-10023" in text:
+                return (
+                    "LLM 调用失败：上下文过长，已超过模型限制。"
+                    "请减少资料数量、清理历史对话，或切换到更大上下文模型。"
+                )
+            if "Parameter error" in text or "-10003" in text:
+                return (
+                    "LLM 调用失败：请求参数不被当前模型/网关接受。"
+                    "请检查模型名（例如 deepseek-v3.2 / qwen-max）和流式参数兼容性。"
+                )
+            return f"LLM 调用失败：{text}"
+
         error_text = ""
-        resolved_model = model_name or (os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
+        resolved_model = _canonical_model_name(model_name or (os.getenv("OPENAI_MODEL") or "gpt-4o-mini"))
         provider = ""
         full_text = ""
         usage = {}
@@ -3399,8 +3498,8 @@ def send_strategy_message_stream(conversation_id: str):
         except Exception as exc:
             error_text = str(exc)
             assistant_text = (
-                f"LLM 调用失败：{error_text}\n"
-                "请检查 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL 配置。"
+                _friendly_llm_error(error_text)
+                + "\n请检查 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL 配置。"
             )
             assistant_message = {
                 "id": assistant_message_id,
@@ -3451,11 +3550,20 @@ def send_strategy_message_stream(conversation_id: str):
         }
         yield _sse(meta)
 
-        for chunk in stream:
-            if not chunk:
-                continue
-            full_text += chunk
-            yield _sse({"type": "delta", "text": chunk})
+        try:
+            for chunk in stream:
+                if not chunk:
+                    continue
+                full_text += chunk
+                yield _sse({"type": "delta", "text": chunk})
+        except Exception as exc:
+            error_text = str(exc)
+            assistant_text = _friendly_llm_error(error_text)
+            yield _sse({"type": "error", "message": assistant_text})
+            if full_text:
+                full_text += f"\n\n[{assistant_text}]"
+            else:
+                full_text = assistant_text
 
         if isinstance(usage_collector, dict):
             usage = usage_collector.get("usage") or usage

@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, date
 from pathlib import Path
 import os
 import time
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, Dict, List, Tuple, Any
 from contextlib import contextmanager
 import akshare as ak
 import pandas as pd
@@ -20,6 +20,7 @@ import baostock as bs
 import threading
 import tempfile
 import shutil
+import json
 # from akshare.utils.requests_fun import requests_obj
 
 # requests_obj.headers.update({
@@ -161,6 +162,8 @@ class StockMetadataManager:
 
         # 股票元数据文件路径
         self.stock_metadata_file = self.metadata_path / "stock_daily_metadata.parquet"
+        self.bak_basic_cache_file = self.metadata_path / "bak_basic_history.parquet"
+        self.bak_basic_state_file = self.metadata_path / "bak_basic_sync_state.json"
 
         print(f"📊 股票元数据管理器初始化完成")
 
@@ -177,6 +180,266 @@ class StockMetadataManager:
         except Exception as e:
             print(f"❌ 加载股票元数据失败: {e}")
             return None
+
+    def load_bak_basic_metadata(self) -> Optional[pl.DataFrame]:
+        """加载 bak_basic 历史缓存数据。"""
+        try:
+            if self.bak_basic_cache_file.exists():
+                df = pl.read_parquet(self.bak_basic_cache_file)
+                print(f"✅ 成功加载 bak_basic 缓存: {df.height} 条记录")
+                return df
+            print(f"⚠️ bak_basic 缓存文件不存在: {self.bak_basic_cache_file}")
+            return None
+        except Exception as e:
+            print(f"❌ 加载 bak_basic 缓存失败: {e}")
+            return None
+
+    def _read_bak_basic_state(self) -> Dict[str, Any]:
+        """读取 bak_basic 同步状态。"""
+        if not self.bak_basic_state_file.exists():
+            return {}
+        try:
+            return json.loads(self.bak_basic_state_file.read_text(encoding="utf-8"))
+        except Exception as e:
+            print(f"⚠️ 读取 bak_basic 状态文件失败: {e}")
+            return {}
+
+    def _write_bak_basic_state(self, state: Dict[str, Any]) -> None:
+        """写入 bak_basic 同步状态。"""
+        try:
+            self.bak_basic_state_file.write_text(
+                json.dumps(state, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except Exception as e:
+            print(f"⚠️ 写入 bak_basic 状态文件失败: {e}")
+
+    @staticmethod
+    def _to_compact_date(value: Any) -> Optional[str]:
+        """转换为 YYYYMMDD 格式。"""
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.strftime("%Y%m%d")
+        if isinstance(value, date):
+            return value.strftime("%Y%m%d")
+        if isinstance(value, str):
+            text = value.strip()
+            if len(text) == 8 and text.isdigit():
+                return text
+            if len(text) == 10 and "-" in text:
+                return text.replace("-", "")
+        return None
+
+    @staticmethod
+    def _next_compact_date(compact_date: str) -> Optional[str]:
+        """计算下一个自然日，返回 YYYYMMDD。"""
+        try:
+            d = datetime.strptime(compact_date, "%Y%m%d").date()
+            return (d + timedelta(days=1)).strftime("%Y%m%d")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _init_tushare_client():
+        """初始化 tushare pro 客户端，并兼容私有 HTTP 网关配置。"""
+        try:
+            import tushare as ts
+        except Exception as e:
+            raise RuntimeError(
+                "未安装 tushare，请先安装与账号兼容的版本（例如 1.4.24）"
+            ) from e
+
+        token = (
+            os.getenv("TUSHARE_API_KEY")
+            or os.getenv("TUSHARE_TOKEN")
+            or os.getenv("TS_TOKEN")
+        )
+        if not token:
+            raise RuntimeError("未找到 tushare token，请在 .env 中配置 TUSHARE_API_KEY")
+
+        pro = ts.pro_api(token)
+        # 兼容私有服务：按你的调用要求强制设置 token 与 http_url。
+        pro._DataApi__token = token
+        pro._DataApi__http_url = os.getenv(
+            "TUSHARE_HTTP_URL",
+            "http://lianghua.nanyangqiankun.top",
+        )
+        return pro
+
+    @staticmethod
+    def _normalize_bak_basic_frame(df: pd.DataFrame) -> Optional[pl.DataFrame]:
+        """标准化 bak_basic 返回字段并转换到 Polars。"""
+        if df is None or df.empty:
+            return None
+
+        expected_cols = [
+            "trade_date", "ts_code", "name", "industry", "area", "pe",
+            "float_share", "total_share", "total_assets", "liquid_assets",
+            "fixed_assets", "reserved", "reserved_pershare", "eps", "bvps",
+            "pb", "list_date", "undp", "per_undp", "rev_yoy", "profit_yoy",
+            "gpr", "npr", "holder_num"
+        ]
+        for col in expected_cols:
+            if col not in df.columns:
+                df[col] = None
+
+        pl_df = pl.from_pandas(df[expected_cols])
+        pl_df = pl_df.with_columns(
+            [
+                pl.col("trade_date").cast(pl.Utf8, strict=False),
+                pl.col("ts_code").cast(pl.Utf8, strict=False),
+                pl.col("name").cast(pl.Utf8, strict=False),
+                pl.col("industry").cast(pl.Utf8, strict=False),
+                pl.col("area").cast(pl.Utf8, strict=False),
+                pl.col("list_date").cast(pl.Utf8, strict=False),
+                pl.col("pe").cast(pl.Float64, strict=False),
+                pl.col("float_share").cast(pl.Float64, strict=False),
+                pl.col("total_share").cast(pl.Float64, strict=False),
+                pl.col("total_assets").cast(pl.Float64, strict=False),
+                pl.col("liquid_assets").cast(pl.Float64, strict=False),
+                pl.col("fixed_assets").cast(pl.Float64, strict=False),
+                pl.col("reserved").cast(pl.Float64, strict=False),
+                pl.col("reserved_pershare").cast(pl.Float64, strict=False),
+                pl.col("eps").cast(pl.Float64, strict=False),
+                pl.col("bvps").cast(pl.Float64, strict=False),
+                pl.col("pb").cast(pl.Float64, strict=False),
+                pl.col("undp").cast(pl.Float64, strict=False),
+                pl.col("per_undp").cast(pl.Float64, strict=False),
+                pl.col("rev_yoy").cast(pl.Float64, strict=False),
+                pl.col("profit_yoy").cast(pl.Float64, strict=False),
+                pl.col("gpr").cast(pl.Float64, strict=False),
+                pl.col("npr").cast(pl.Float64, strict=False),
+                pl.col("holder_num").cast(pl.Int64, strict=False),
+            ]
+        )
+        return pl_df
+
+    def update_bak_basic_metadata(
+        self,
+        start_date: str = "20160101",
+        end_date: Optional[str] = None,
+        force_full: bool = False,
+        progress_callback=None,
+        save_every_days: int = 20,
+        throttle_seconds: float = 0.08,
+    ) -> bool:
+        """增量更新 bak_basic 历史缓存（默认从 2016-01-01 起）。"""
+        try:
+            pro = self._init_tushare_client()
+            end_compact = self._to_compact_date(end_date) or datetime.now().strftime("%Y%m%d")
+            start_compact = self._to_compact_date(start_date) or "20160101"
+
+            existing = None if force_full else self.load_bak_basic_metadata()
+            state = {} if force_full else self._read_bak_basic_state()
+
+            latest_existing = None
+            if existing is not None and not existing.is_empty() and "trade_date" in existing.columns:
+                latest_existing = existing["trade_date"].max()
+                latest_existing = self._to_compact_date(latest_existing)
+
+            latest_state = self._to_compact_date(state.get("latest_trade_date"))
+            latest_synced = max([d for d in [latest_existing, latest_state] if d], default=None)
+            if latest_synced:
+                next_date = self._next_compact_date(latest_synced)
+                if next_date:
+                    start_compact = max(start_compact, next_date)
+
+            if start_compact > end_compact:
+                print(
+                    f"✅ bak_basic 已是最新，无需更新: start={start_compact}, end={end_compact}"
+                )
+                return True
+
+            cal = pro.trade_cal(
+                exchange="",
+                start_date=start_compact,
+                end_date=end_compact,
+                is_open="1",
+                fields="cal_date,is_open",
+            )
+            if cal is None or cal.empty:
+                print("⚠️ 未获取到可更新的交易日，跳过 bak_basic 更新")
+                return True
+
+            trade_days = sorted(cal["cal_date"].astype(str).unique().tolist())
+            total_days = len(trade_days)
+            print(f"📅 bak_basic 待更新交易日: {total_days} 天 ({start_compact} -> {end_compact})")
+
+            all_new_frames: List[pl.DataFrame] = []
+            success_days = 0
+            for idx, trade_day in enumerate(trade_days, start=1):
+                try:
+                    day_df = pro.bak_basic(
+                        trade_date=trade_day,
+                        fields=(
+                            "trade_date,ts_code,name,industry,area,pe,float_share,total_share,"
+                            "total_assets,liquid_assets,fixed_assets,reserved,reserved_pershare,"
+                            "eps,bvps,pb,list_date,undp,per_undp,rev_yoy,profit_yoy,gpr,npr,holder_num"
+                        ),
+                    )
+                    day_pl = self._normalize_bak_basic_frame(day_df)
+                    if day_pl is not None and not day_pl.is_empty():
+                        all_new_frames.append(day_pl)
+                    success_days += 1
+                except Exception as e:
+                    print(f"⚠️ bak_basic 拉取失败 {trade_day}: {e}")
+
+                if progress_callback:
+                    progress_callback(idx, total_days, f"bak_basic 更新中: {trade_day} ({idx}/{total_days})")
+
+                if (
+                    save_every_days > 0
+                    and idx % save_every_days == 0
+                    and all_new_frames
+                ):
+                    merged = pl.concat(all_new_frames, how="vertical_relaxed")
+                    if existing is not None and not existing.is_empty():
+                        merged = pl.concat([existing, merged], how="vertical_relaxed")
+                    merged = merged.unique(subset=["trade_date", "ts_code"], keep="last").sort(["trade_date", "ts_code"])
+                    safe_write_parquet(merged, str(self.bak_basic_cache_file))
+                    existing = merged
+                    all_new_frames = []
+
+                if throttle_seconds > 0:
+                    time.sleep(throttle_seconds)
+
+            if all_new_frames:
+                merged = pl.concat(all_new_frames, how="vertical_relaxed")
+                if existing is not None and not existing.is_empty():
+                    merged = pl.concat([existing, merged], how="vertical_relaxed")
+            else:
+                merged = existing
+
+            if merged is None:
+                print("⚠️ bak_basic 本次未产生可写入数据")
+                return False
+
+            merged = merged.unique(subset=["trade_date", "ts_code"], keep="last").sort(["trade_date", "ts_code"])
+            ok = safe_write_parquet(merged, str(self.bak_basic_cache_file))
+            if not ok:
+                return False
+
+            latest_trade_date = merged["trade_date"].max() if "trade_date" in merged.columns else None
+            self._write_bak_basic_state(
+                {
+                    "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "latest_trade_date": latest_trade_date,
+                    "rows": merged.height,
+                    "source": "tushare.bak_basic",
+                    "http_url": os.getenv("TUSHARE_HTTP_URL", "http://lianghua.nanyangqiankun.top"),
+                }
+            )
+            print(
+                f"✅ bak_basic 更新完成: 成功处理交易日 {success_days}/{total_days}, "
+                f"当前总记录 {merged.height}"
+            )
+            return True
+        except Exception as e:
+            print(f"❌ 更新 bak_basic 缓存失败: {e}")
+            import traceback
+            traceback.print_exc()
+            return False
 
     def _fill_missing_data_for_date_range(
         self,
