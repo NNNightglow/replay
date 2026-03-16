@@ -612,9 +612,11 @@ def _build_resource_context(resource_ids: List[str]) -> Tuple[str, List[str], Li
     strategies = strategies_payload.get("strategies", [])
     strategy_map = {s.get("id"): s for s in strategies if s.get("id")}
 
-    selected_ids = resource_ids or ([active_resource_id] if active_resource_id else [])
+    # Strict mode for chat: if user does not explicitly select resources,
+    # do not auto-inject active/all resources into model context.
+    selected_ids = list(resource_ids or [])
     if not selected_ids:
-        selected_ids = [r.get("id") for r in resources if r.get("status") == "ok"]
+        return "", [], []
     total_len = 0
     used_ids: List[str] = []
     skipped: List[Dict] = []
@@ -683,39 +685,31 @@ def _build_resource_context(resource_ids: List[str]) -> Tuple[str, List[str], Li
 def _build_strategy_context(strategy_id: str = "") -> Tuple[str, str]:
     payload = _load_strategies_payload()
     strategies = payload.get("strategies", [])
-    active_strategy_id = (payload.get("active_strategy_id") or "").strip()
     strategy_map = {item.get("id"): item for item in strategies if item.get("id")}
 
     requested_id = (strategy_id or "").strip()
-    resolved_id = requested_id or active_strategy_id
-    target = strategy_map.get(resolved_id) if resolved_id else None
+    # Strict mode for strategy context:
+    # only inject strategy context when user explicitly provides strategy_id.
+    if not requested_id:
+        return "", ""
 
-    if not target and active_strategy_id:
-        target = strategy_map.get(active_strategy_id)
-        resolved_id = active_strategy_id if target else resolved_id
-
-    if not target and strategies:
-        target = strategies[0]
-        resolved_id = (target.get("id") or "").strip()
-
-    lines: List[str] = [
-        "策略与看盘上下文：",
-        f"- active_strategy_id: {active_strategy_id or '(none)'}",
-        f"- strategy_count: {len(strategies)}",
-    ]
-
+    target = strategy_map.get(requested_id)
     if not target:
-        lines.append("- 当前没有可用策略配置。")
-        return "\n".join(lines), ""
+        return "", ""
 
     config = target.get("config") if isinstance(target.get("config"), dict) else {}
     widgets = config.get("widgets") if isinstance(config, dict) else None
     widget_count = len(widgets) if isinstance(widgets, list) else 0
     config_json = json.dumps(config, ensure_ascii=False, separators=(",", ":"))
 
+    lines: List[str] = [
+        "策略与看盘上下文（用户显式选择）：",
+        f"- strategy_id: {target.get('id') or ''}",
+        f"- strategy_count: {len(strategies)}",
+    ]
     lines.extend(
         [
-            "- 当前策略：",
+            "- 当前策略：",  # keep existing downstream parser compatibility
             f"  - id: {target.get('id') or ''}",
             f"  - name: {target.get('name') or ''}",
             f"  - description: {target.get('description') or ''}",
@@ -725,7 +719,7 @@ def _build_strategy_context(strategy_id: str = "") -> Tuple[str, str]:
         ]
     )
 
-    return "\n".join(lines), resolved_id
+    return "\n".join(lines), requested_id
 
 
 def _is_relpath_referenced(resources: List[Dict], rel_path: str, exclude_resource_id: str = "") -> bool:
