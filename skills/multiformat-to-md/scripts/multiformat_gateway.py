@@ -17,6 +17,9 @@ MEDIA_EXTENSIONS = {".mp3", ".mp4"}
 ProgressCallback = Callable[[float, float, str], None]
 BridgeProgressCallback = Callable[[int, int, str], None]
 _PROGRESS_PATTERN = re.compile(r"\b(\d{1,3})%\s*(.*)")
+_DATE_YMD_SEP_PATTERN = re.compile(r"(?<!\d)(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?(?!\d)")
+_DATE_YMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
+_DATE_YYMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)")
 
 
 class ProgressPrinter:
@@ -88,11 +91,15 @@ def resolve_inputs(inputs: Iterable[str], allowed_exts: Optional[set[str]] = Non
 
 def build_markdown(path: Path, content: str, status: str, error: str = "") -> str:
     ts = dt.datetime.now(dt.timezone.utc).isoformat()
+    content_time, content_time_type, content_time_evidence = _infer_content_time(path, content)
     header = [
         "---",
         f'source_file: "{path.as_posix()}"',
         f"converted_at_utc: {ts}",
         f"status: {status}",
+        f"content_time: {content_time}",
+        f"content_time_type: {content_time_type}",
+        f'content_time_evidence: "{content_time_evidence}"',
         "---",
         "",
         f"# {path.name}",
@@ -127,6 +134,55 @@ def _parse_markdown_status(markdown_path: Path) -> Tuple[str, str]:
             after = after.split("## Content", 1)[0]
         error_message = after.strip()
     return status, error_message
+
+
+def _safe_date_str(year: int, month: int, day: int) -> str:
+    try:
+        return dt.date(year, month, day).isoformat()
+    except Exception:
+        return ""
+
+
+def _extract_date_from_text(text: str) -> Tuple[str, str]:
+    if not text:
+        return "", ""
+
+    m = _DATE_YMD_SEP_PATTERN.search(text)
+    if m:
+        y, mth, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        date_str = _safe_date_str(y, mth, d)
+        if date_str:
+            return date_str, m.group(0)
+
+    m = _DATE_YMD_COMPACT_PATTERN.search(text)
+    if m:
+        y, mth, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        date_str = _safe_date_str(y, mth, d)
+        if date_str:
+            return date_str, m.group(0)
+
+    m = _DATE_YYMD_COMPACT_PATTERN.search(text)
+    if m:
+        yy, mth, d = int(m.group(1)), int(m.group(2)), int(m.group(3))
+        y = 2000 + yy if yy <= 69 else 1900 + yy
+        date_str = _safe_date_str(y, mth, d)
+        if date_str:
+            return date_str, m.group(0)
+
+    return "", ""
+
+
+def _infer_content_time(path: Path, content: str) -> Tuple[str, str, str]:
+    from_filename, filename_hit = _extract_date_from_text(path.name)
+    if from_filename:
+        return from_filename, "inferred_filename", f"filename:{filename_hit}"
+
+    sample = (content or "")[:6000]
+    from_content, content_hit = _extract_date_from_text(sample)
+    if from_content:
+        return from_content, "inferred_text", f"content:{content_hit}"
+
+    return "", "unknown", ""
 
 
 def _parse_frontmatter(text: str) -> Tuple[str, str]:

@@ -282,18 +282,132 @@ def _env_flag(name: str, default: str = "0") -> bool:
     return raw in {"1", "true", "yes", "on"}
 
 
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except Exception:
+        return default
+
+
+def _normalize_model_name(model_name: str) -> str:
+    raw = (model_name or "").strip()
+    if not raw:
+        return raw
+    lowered = raw.lower()
+    alias_map = {
+        "ds v3.2": "deepseek-v3.2",
+        "ds-v3.2": "deepseek-v3.2",
+        "ds v3.2 thinking": "deepseek-v3.2-thinking",
+        "ds-v3.2-thinking": "deepseek-v3.2-thinking",
+        "ds v3.1": "deepseek-v3.1",
+        "ds-v3.1": "deepseek-v3.1",
+        "deepseek/deepseek-v3.2": "deepseek-v3.2",
+        "deepseek/deepseek-v3.2-thinking": "deepseek-v3.2-thinking",
+        "deepseek/deepseek-v3.1": "deepseek-v3.1",
+        "deepseek/deepseek-v3.1-terminus": "deepseek-v3.1",
+    }
+    if lowered in alias_map:
+        return alias_map[lowered]
+    if lowered.startswith("deepseek/"):
+        tail = raw.split("/", 1)[1].strip()
+        if tail.lower().startswith("deepseek-"):
+            return tail
+    return raw
+
+
+def _truncate_text(text: str, max_chars: int) -> str:
+    value = (text or "").strip()
+    if max_chars <= 0 or len(value) <= max_chars:
+        return value
+    keep = max(64, max_chars - 48)
+    return value[:keep] + "\n...[truncated]"
+
+
+def _estimate_tokens_from_text(text: str) -> int:
+    if not text:
+        return 0
+    # Conservative approximation for mixed Chinese/English prompts.
+    byte_len = len(text.encode("utf-8", errors="ignore"))
+    return max(1, int(byte_len / 2.4))
+
+
+def _estimate_messages_tokens(messages: List[Dict[str, Any]]) -> int:
+    total = 3
+    for item in messages:
+        total += 4
+        total += _estimate_tokens_from_text(str(item.get("content") or ""))
+    return total
+
+
+def _fit_messages_to_budget(messages: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not messages:
+        return []
+
+    max_input_tokens = _env_int("OPENAI_MAX_INPUT_TOKENS", 20_000)
+    max_output_tokens = _env_int("OPENAI_MAX_OUTPUT_TOKENS", 1_500)
+    soft_budget = max(2_000, max_input_tokens - max_output_tokens)
+
+    trimmed: List[Dict[str, Any]] = [
+        {"role": str(item.get("role") or ""), "content": str(item.get("content") or "")}
+        for item in messages
+    ]
+
+    system_block_max_chars = _env_int("OPENAI_SYSTEM_BLOCK_MAX_CHARS", 12_000)
+    for idx, item in enumerate(trimmed):
+        if item.get("role") == "system" and idx > 0:
+            item["content"] = _truncate_text(item.get("content") or "", system_block_max_chars)
+
+    while _estimate_messages_tokens(trimmed) > soft_budget and len(trimmed) > 2:
+        drop_idx = -1
+        for idx in range(1, len(trimmed) - 1):
+            if trimmed[idx].get("role") in {"assistant", "user", "system"}:
+                drop_idx = idx
+                break
+        if drop_idx == -1:
+            break
+        trimmed.pop(drop_idx)
+
+    if _estimate_messages_tokens(trimmed) > soft_budget:
+        last_idx = len(trimmed) - 1
+        last_msg_cap = _env_int("OPENAI_LAST_USER_MAX_CHARS", 6_000)
+        trimmed[last_idx]["content"] = _truncate_text(trimmed[last_idx].get("content") or "", last_msg_cap)
+
+    if _estimate_messages_tokens(trimmed) > soft_budget and trimmed:
+        first_cap = _env_int("OPENAI_SYSTEM_PROMPT_MAX_CHARS", 3_000)
+        trimmed[0]["content"] = _truncate_text(trimmed[0].get("content") or "", first_cap)
+
+    return trimmed
+
+
 def _normalize_history_messages(
     history_messages: List[Dict[str, Any]],
     user_content: str,
 ) -> List[Dict[str, str]]:
-    normalized: List[Dict[str, str]] = []
-    for item in history_messages[-24:]:
+    per_message_max_chars = _env_int("OPENAI_HISTORY_ITEM_MAX_CHARS", 2_400)
+    total_history_max_chars = _env_int("OPENAI_HISTORY_TOTAL_MAX_CHARS", 14_000)
+    normalized_reversed: List[Dict[str, str]] = []
+    total_chars = 0
+
+    for item in reversed(history_messages[-24:]):
         role = (item.get("role") or "").strip()
         content = (item.get("content") or "").strip()
         if role in {"user", "assistant"} and content:
-            normalized.append({"role": role, "content": content})
+            clipped = _truncate_text(content, per_message_max_chars)
+            projected = total_chars + len(clipped)
+            if projected > total_history_max_chars:
+                remain = total_history_max_chars - total_chars
+                if remain <= 100:
+                    continue
+                clipped = _truncate_text(clipped, remain)
+                projected = total_chars + len(clipped)
+            normalized_reversed.append({"role": role, "content": clipped})
+            total_chars = projected
 
     user_content = (user_content or "").strip()
+    normalized = list(reversed(normalized_reversed))
     if user_content:
         if not normalized or normalized[-1].get("role") != "user" or normalized[-1].get("content") != user_content:
             normalized.append({"role": "user", "content": user_content})
@@ -311,7 +425,7 @@ def _build_openai_messages(
     for block in _compose_context_blocks(resource_context, extra_context):
         messages.append({"role": "system", "content": block})
     messages.extend(_normalize_history_messages(history_messages, user_content))
-    return messages
+    return _fit_messages_to_budget(messages)
 
 
 def _ensure_agentscope_init(model_name: str, base_url: str, api_key: str, temperature: float) -> None:
@@ -423,22 +537,65 @@ def _stream_openai_compatible(
     temperature: float,
     usage_collector: Dict[str, Any] = None,
 ):
+    def _is_parameter_error(text: str) -> bool:
+        lowered = (text or "").lower()
+        needles = (
+            "parameter error",
+            "-10003",
+            "invalid parameter",
+            "unknown parameter",
+            "unsupported parameter",
+            "does not support",
+            "not support",
+            "参数错误",
+            "不支持",
+        )
+        return any(item in lowered for item in needles)
+
     include_usage = os.getenv("OPENAI_STREAM_INCLUDE_USAGE", "1").strip() != "0"
-    payload = {
+    req_payload = {
         "model": model_name,
         "messages": messages,
         "temperature": max(0.0, min(float(temperature), 2.0)),
         "stream": True,
     }
     if include_usage:
-        payload["stream_options"] = {"include_usage": True}
-    response = requests.post(
-        f"{base_url.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-        json=payload,
-        stream=True,
-        timeout=int(os.getenv("OPENAI_TIMEOUT_SECONDS", "180")),
-    )
+        req_payload["stream_options"] = {"include_usage": True}
+
+    def _post_stream(payload: Dict[str, Any]):
+        return requests.post(
+            f"{base_url.rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json=payload,
+            stream=True,
+            timeout=int(os.getenv("OPENAI_TIMEOUT_SECONDS", "180")),
+        )
+
+    response = _post_stream(req_payload)
+    body_hint = (response.text or "")[:800] if response.status_code >= 400 else ""
+    if response.status_code >= 400 and include_usage and "stream_options" in req_payload:
+        if _is_parameter_error(body_hint):
+            retry_payload = dict(req_payload)
+            retry_payload.pop("stream_options", None)
+            response = _post_stream(retry_payload)
+            body_hint = (response.text or "")[:800] if response.status_code >= 400 else ""
+
+    if response.status_code >= 400 and _is_parameter_error(body_hint):
+        # Some gateways reject streaming or stream_options for specific models.
+        # Fall back to one-shot completion so the request can still succeed.
+        content, usage = _call_openai_compatible(
+            messages=messages,
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
+            temperature=temperature,
+        )
+        if usage_collector is not None and isinstance(usage, dict):
+            usage_collector["usage"] = usage
+        if content:
+            yield content
+        return
+
     if response.status_code >= 400:
         raise RuntimeError(f"LLM interface error {response.status_code}: {response.text[:400]}")
 
@@ -518,7 +675,7 @@ def chat_with_agent(
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
 
-    resolved_model = (model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
+    resolved_model = _normalize_model_name(model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
     base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
 
     sys_prompt = _get_agent_prompt(agent_name)
@@ -601,7 +758,7 @@ def chat_with_agent_stream(
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
 
-    resolved_model = (model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
+    resolved_model = _normalize_model_name(model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
     base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
 
     sys_prompt = _get_agent_prompt(agent_name)

@@ -242,6 +242,16 @@
                   :value="agent.name"
                 />
               </el-select>
+              <el-select v-model="activeMemoryProfileId" placeholder="长期记忆（人格）" style="width: 220px">
+                <el-option label="不使用长期记忆" value="" />
+                <el-option
+                  v-for="profile in memoryProfiles"
+                  :key="profile.id"
+                  :label="`${profile.name} (${profile.linked_resource_count || 0})`"
+                  :value="profile.id"
+                />
+              </el-select>
+              <el-button size="small" @click="openMemoryManageDialog">记忆编辑</el-button>
               <el-popover
                 placement="bottom-start"
                 trigger="click"
@@ -706,6 +716,199 @@
         <el-button type="primary" @click="submitGroupTransfer">确认</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="memoryManageVisible" title="长期记忆管理" width="980px">
+      <div class="memory-toolbar">
+        <el-select v-model="memoryManageProfileId" style="width: 260px" placeholder="选择人格">
+          <el-option
+            v-for="profile in memoryProfiles"
+            :key="profile.id"
+            :label="`${profile.name} (${profile.linked_resource_count || 0})`"
+            :value="profile.id"
+          />
+        </el-select>
+        <el-button size="small" @click="createMemoryProfile">新建人格</el-button>
+        <el-button size="small" :disabled="!memoryManageProfileId" @click="renameMemoryProfile">重命名</el-button>
+        <el-button
+          size="small"
+          type="danger"
+          plain
+          :disabled="!memoryManageProfileId"
+          @click="deleteMemoryProfile"
+        >
+          删除人格
+        </el-button>
+        <el-button
+          size="small"
+          type="primary"
+          plain
+          :disabled="!memoryManageProfileId"
+          @click="applyMemoryAsActive"
+        >
+          设为当前会话人格
+        </el-button>
+      </div>
+
+      <el-tabs v-model="memoryActiveTab">
+        <el-tab-pane label="资料绑定" name="binding">
+          <div class="memory-bind-toolbar">
+            <el-select
+              v-model="memoryBindFilterGroupId"
+              size="small"
+              style="width: 180px"
+              placeholder="筛选分组"
+            >
+              <el-option label="所有分组" value="" />
+              <el-option
+                v-for="grp in resourceGroups"
+                :key="grp.group_id"
+                :label="`${grp.group_name} (${grp.count})`"
+                :value="grp.group_id"
+              />
+            </el-select>
+            <el-button
+              size="small"
+              type="primary"
+              :disabled="!memoryManageProfileId || !memoryBindSelectedIds.length"
+              @click="bindSelectedResourcesToMemory"
+            >
+              添加选中文件到长期记忆
+            </el-button>
+            <el-select
+              v-model="memoryBindGroupId"
+              size="small"
+              style="width: 220px"
+              placeholder="选择分组"
+            >
+              <el-option
+                v-for="grp in resourceGroups"
+                :key="grp.group_id"
+                :label="`${grp.group_name} (${grp.count})`"
+                :value="grp.group_id"
+              />
+            </el-select>
+            <el-button
+              size="small"
+              :disabled="!memoryManageProfileId || !memoryBindGroupId"
+              @click="bindGroupToMemory"
+            >
+              首次纳入整组
+            </el-button>
+            <el-button
+              size="small"
+              :disabled="!memoryManageProfileId"
+              @click="syncMemoryGroupIncremental"
+            >
+              手动同步分组新增
+            </el-button>
+          </div>
+
+          <div class="memory-bind-list">
+            <el-checkbox-group v-model="memoryBindSelectedIds" class="memory-checkbox-group">
+              <div
+                v-for="res in memoryBindResources"
+                :key="res.id"
+                class="memory-bind-item"
+              >
+                <el-checkbox :label="res.id">
+                  <div class="memory-bind-name">{{ res.original_name }}</div>
+                  <div class="memory-bind-meta">
+                    {{ res.group_name || '未分组' }}
+                    <span v-if="res.content_time"> · 内容时间 {{ res.content_time }}</span>
+                  </div>
+                </el-checkbox>
+              </div>
+            </el-checkbox-group>
+            <el-empty v-if="!memoryBindResources.length" description="暂无可选资料" :image-size="56" />
+          </div>
+        </el-tab-pane>
+
+        <el-tab-pane label="人物侧写" name="portrait">
+          <div class="memory-portrait-actions">
+            <el-select
+              v-model="selectedPortraitModel"
+              size="small"
+              style="width: 240px"
+              placeholder="选择侧写模型"
+            >
+              <el-option
+                v-for="model in modelOptions"
+                :key="`portrait_${model.value}`"
+                :label="model.label"
+                :value="model.value"
+              />
+            </el-select>
+            <el-button
+              size="small"
+              type="primary"
+              :disabled="!memoryManageProfileId"
+              :loading="memoryDraftLoading"
+              @click="generateMemoryPortraitDraft"
+            >
+              AI 生成初稿
+            </el-button>
+            <el-button
+              size="small"
+              :disabled="!memoryManageProfileId"
+              @click="saveMemoryPortrait"
+            >
+              保存侧写
+            </el-button>
+            <el-dropdown
+              trigger="click"
+              :disabled="!memoryManageProfileId"
+              @command="exportMemoryPortrait"
+            >
+              <el-button size="small">
+                导出侧写
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="md">导出 Markdown</el-dropdown-item>
+                  <el-dropdown-item command="docx">导出 Word</el-dropdown-item>
+                  <el-dropdown-item command="pdf">导出 PDF</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <el-button
+              size="small"
+              :disabled="!memoryManageProfileId"
+              @click="loadMemoryPreviewContext"
+            >
+              刷新上下文预览
+            </el-button>
+          </div>
+          <el-form label-width="110px">
+            <el-form-item label="交易方法论">
+              <el-input v-model="memoryPortraitForm.methodology" type="textarea" :rows="4" />
+            </el-form-item>
+            <el-form-item label="交易手法">
+              <el-input v-model="memoryPortraitForm.tactics" type="textarea" :rows="4" />
+            </el-form-item>
+            <el-form-item label="观点">
+              <el-input v-model="memoryPortraitForm.views" type="textarea" :rows="4" />
+            </el-form-item>
+            <el-form-item label="交易操作">
+              <el-input v-model="memoryPortraitForm.operations" type="textarea" :rows="4" />
+            </el-form-item>
+            <el-form-item label="风控规则">
+              <el-input v-model="memoryPortraitForm.risk_rules" type="textarea" :rows="3" />
+            </el-form-item>
+            <el-form-item label="风格约束">
+              <el-input v-model="memoryPortraitForm.style_constraints" type="textarea" :rows="3" />
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
+
+        <el-tab-pane label="上下文预览" name="preview">
+          <el-input v-model="memoryPreviewContext" type="textarea" :rows="18" readonly />
+        </el-tab-pane>
+      </el-tabs>
+
+      <template #footer>
+        <el-button @click="memoryManageVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -775,12 +978,40 @@ const groupTransferForm = ref({
 })
 
 const selectedAgentName = ref('planner_agent')
-const modelOptions = [
-  { label: 'v3.2 思考', value: 'deepseek-v3.2-thinking' },
-  { label: 'v3.2', value: 'deepseek-v3.2' }
+const DEFAULT_MODEL_OPTIONS = [
+  { label: 'DeepSeek v3.2', value: 'deepseek-v3.2' },
+  { label: 'DeepSeek v3.2 Thinking', value: 'deepseek-v3.2-thinking' },
+  { label: 'DeepSeek v3.1', value: 'deepseek-v3.1' },
+  { label: '通义千问 qwen-max', value: 'qwen-max' },
+  { label: '通义千问 qvq-max', value: 'qvq-max' },
+  { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' }
 ]
+const normalizeModelOptions = (rawOptions = []) => {
+  const out = []
+  const seen = new Set()
+  const arr = Array.isArray(rawOptions) ? rawOptions : []
+  for (const item of arr) {
+    if (!item) continue
+    if (typeof item === 'string') {
+      const value = item.trim()
+      if (!value || seen.has(value)) continue
+      seen.add(value)
+      out.push({ label: value, value })
+      continue
+    }
+    const value = String(item.value || item.id || '').trim()
+    if (!value || seen.has(value)) continue
+    seen.add(value)
+    const label = String(item.label || item.name || value).trim() || value
+    out.push({ label, value })
+  }
+  return out
+}
+const modelOptions = ref(normalizeModelOptions(DEFAULT_MODEL_OPTIONS))
 const selectedModel = ref('deepseek-v3.2')
-const PROMPT_TEMPLATE_STORAGE_KEY = 'strategy_watch_prompt_templates_v1'
+const selectedPortraitModel = ref('deepseek-v3.2')
+const PROMPT_TEMPLATE_STORAGE_KEY = 'strategy_watch_prompt_templates'
+const LEGACY_PROMPT_TEMPLATE_STORAGE_KEY = 'strategy_watch_prompt_templates_v1'
 const DEFAULT_PROMPT_TEMPLATES = [
   { id: 'none', name: '不使用模板', content: '' },
   {
@@ -841,6 +1072,24 @@ const normalizePromptTemplates = (rawTemplates) => {
 const promptTemplates = ref(clonePromptTemplates())
 const selectedPromptTemplateId = ref('none')
 const promptTemplatePopoverVisible = ref(false)
+const memoryProfiles = ref([])
+const activeMemoryProfileId = ref('')
+const memoryManageVisible = ref(false)
+const memoryManageProfileId = ref('')
+const memoryActiveTab = ref('binding')
+const memoryBindSelectedIds = ref([])
+const memoryBindGroupId = ref('')
+const memoryBindFilterGroupId = ref('')
+const memoryDraftLoading = ref(false)
+const memoryPreviewContext = ref('')
+const memoryPortraitForm = ref({
+  methodology: '',
+  tactics: '',
+  views: '',
+  operations: '',
+  risk_rules: '',
+  style_constraints: ''
+})
 
 const strategyViewOptions = [
   { label: '基础看盘', value: 'basic' },
@@ -864,7 +1113,6 @@ const keyWatchError = ref('')
 const keyStockSearchQuery = ref('')
 const keyPaneWidthPercent = ref(36)
 const keyLevelWindowDays = ref(3650)
-const keyLevelMethodVer = ref('v1')
 const keyBoardBodyRef = ref(null)
 const keyPaneResizing = ref(false)
 const chatSidebarCollapsed = ref(false)
@@ -918,6 +1166,14 @@ const manageFilteredResources = computed(() => {
   if (!manageFilterGroupId.value) return resources.value
   return resources.value.filter(item => item.group_id === manageFilterGroupId.value)
 })
+const memoryBindResources = computed(() => {
+  const base = resources.value.filter(item => item.status === 'ok')
+  if (!memoryBindFilterGroupId.value) return base
+  return base.filter(item => item.group_id === memoryBindFilterGroupId.value)
+})
+const currentMemoryProfile = computed(() => {
+  return memoryProfiles.value.find(item => item.id === memoryManageProfileId.value) || null
+})
 const activeConversationTitle = computed(() => {
   const found = conversations.value.find(item => item.id === activeConversationId.value)
   return found ? found.title : ''
@@ -962,12 +1218,16 @@ const loadPromptTemplatesFromStorage = () => {
   if (typeof window === 'undefined') return
   try {
     const raw = window.localStorage.getItem(PROMPT_TEMPLATE_STORAGE_KEY)
+      || window.localStorage.getItem(LEGACY_PROMPT_TEMPLATE_STORAGE_KEY)
     if (!raw) {
       promptTemplates.value = clonePromptTemplates()
       return
     }
     const parsed = JSON.parse(raw)
     promptTemplates.value = normalizePromptTemplates(parsed)
+    if (window.localStorage.getItem(LEGACY_PROMPT_TEMPLATE_STORAGE_KEY)) {
+      window.localStorage.removeItem(LEGACY_PROMPT_TEMPLATE_STORAGE_KEY)
+    }
   } catch (error) {
     console.error(error)
     promptTemplates.value = clonePromptTemplates()
@@ -1028,6 +1288,295 @@ const deletePromptTemplate = async () => {
     ElMessage.success('模板已删除')
   } catch (error) {
     if (error !== 'cancel') console.error(error)
+  }
+}
+
+const resetMemoryPortraitForm = () => {
+  memoryPortraitForm.value = {
+    methodology: '',
+    tactics: '',
+    views: '',
+    operations: '',
+    risk_rules: '',
+    style_constraints: ''
+  }
+}
+
+const applyMemoryPortrait = (portrait) => {
+  const source = portrait || {}
+  memoryPortraitForm.value = {
+    methodology: String(source.methodology || ''),
+    tactics: String(source.tactics || ''),
+    views: String(source.views || ''),
+    operations: String(source.operations || ''),
+    risk_rules: String(source.risk_rules || ''),
+    style_constraints: String(source.style_constraints || '')
+  }
+}
+
+const loadMemoryPortrait = async (profileId) => {
+  const pid = String(profileId || '').trim()
+  if (!pid) {
+    resetMemoryPortraitForm()
+    return
+  }
+  try {
+    const res = await ApiService.getMemoryPortrait(pid)
+    applyMemoryPortrait(res.data || {})
+  } catch (error) {
+    console.error(error)
+    resetMemoryPortraitForm()
+  }
+}
+
+const loadMemoryProfiles = async () => {
+  try {
+    const res = await ApiService.getMemoryProfiles()
+    const payload = res.data || {}
+    const profiles = payload.profiles || []
+    const activeId = payload.active_profile_id || ''
+    memoryProfiles.value = Array.isArray(profiles) ? profiles : []
+
+    const validIds = new Set(memoryProfiles.value.map(item => item.id))
+    if (activeMemoryProfileId.value && !validIds.has(activeMemoryProfileId.value)) {
+      activeMemoryProfileId.value = ''
+    }
+    if (activeId && validIds.has(activeId)) {
+      activeMemoryProfileId.value = activeId
+    }
+    if (!activeMemoryProfileId.value && memoryProfiles.value.length) {
+      activeMemoryProfileId.value = memoryProfiles.value[0].id
+    }
+
+    if (memoryManageProfileId.value && !validIds.has(memoryManageProfileId.value)) {
+      memoryManageProfileId.value = activeMemoryProfileId.value || (memoryProfiles.value[0]?.id || '')
+    }
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const loadMemoryPreviewContext = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  if (!pid) {
+    memoryPreviewContext.value = ''
+    return
+  }
+  try {
+    const res = await ApiService.previewMemoryProfileContext(pid)
+    memoryPreviewContext.value = String(res.data?.context || '')
+  } catch (error) {
+    console.error(error)
+    memoryPreviewContext.value = ''
+  }
+}
+
+const openMemoryManageDialog = async () => {
+  memoryManageVisible.value = true
+  memoryActiveTab.value = 'binding'
+  memoryBindSelectedIds.value = []
+  await loadMemoryProfiles()
+  if (!memoryManageProfileId.value) {
+    memoryManageProfileId.value = activeMemoryProfileId.value || (memoryProfiles.value[0]?.id || '')
+  }
+  await loadMemoryPortrait(memoryManageProfileId.value)
+  await loadMemoryPreviewContext()
+}
+
+const createMemoryProfile = async () => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入人格名称', '新建长期记忆人格', {
+      inputValue: '新人格',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const name = String(value || '').trim()
+    if (!name) return
+    const res = await ApiService.createMemoryProfile({ name })
+    const created = res.data
+    await loadMemoryProfiles()
+    if (created?.id) {
+      memoryManageProfileId.value = created.id
+      activeMemoryProfileId.value = created.id
+      await ApiService.setActiveMemoryProfile(created.id)
+      await loadMemoryPortrait(created.id)
+      await loadMemoryPreviewContext()
+    }
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
+const renameMemoryProfile = async () => {
+  if (!memoryManageProfileId.value || !currentMemoryProfile.value) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入新的人格名称', '重命名人格', {
+      inputValue: currentMemoryProfile.value.name || '',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const name = String(value || '').trim()
+    if (!name) return
+    await ApiService.updateMemoryProfile(memoryManageProfileId.value, { name })
+    await loadMemoryProfiles()
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
+const deleteMemoryProfile = async () => {
+  if (!memoryManageProfileId.value || !currentMemoryProfile.value) return
+  try {
+    await ElMessageBox.confirm(
+      `确定删除人格“${currentMemoryProfile.value.name}”吗？`,
+      '删除人格',
+      {
+        type: 'warning',
+        confirmButtonText: '删除',
+        cancelButtonText: '取消'
+      }
+    )
+    const removedId = memoryManageProfileId.value
+    await ApiService.deleteMemoryProfile(removedId)
+    if (activeMemoryProfileId.value === removedId) {
+      activeMemoryProfileId.value = ''
+      await ApiService.setActiveMemoryProfile('')
+    }
+    memoryManageProfileId.value = ''
+    resetMemoryPortraitForm()
+    memoryPreviewContext.value = ''
+    await loadMemoryProfiles()
+    if (!memoryManageProfileId.value) {
+      memoryManageProfileId.value = activeMemoryProfileId.value || (memoryProfiles.value[0]?.id || '')
+    }
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
+const applyMemoryAsActive = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  activeMemoryProfileId.value = pid
+  try {
+    await ApiService.setActiveMemoryProfile(pid)
+    ElMessage.success(pid ? '已设置当前人格' : '已取消当前人格')
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const bindSelectedResourcesToMemory = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  if (!pid || !memoryBindSelectedIds.value.length) return
+  try {
+    const res = await ApiService.bindMemoryProfileResources(pid, memoryBindSelectedIds.value)
+    const added = Number(res.data?.added || 0)
+    ElMessage.success(`已添加 ${added} 个资料到长期记忆`)
+    memoryBindSelectedIds.value = []
+    await loadMemoryProfiles()
+    await loadMemoryPreviewContext()
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const bindGroupToMemory = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  const gid = String(memoryBindGroupId.value || '').trim()
+  if (!pid || !gid) return
+  try {
+    const res = await ApiService.bindMemoryProfileGroup(pid, gid)
+    const added = Number(res.data?.added || 0)
+    ElMessage.success(`整组纳入完成，新增 ${added} 条`)
+    await loadMemoryProfiles()
+    await loadMemoryPreviewContext()
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const syncMemoryGroupIncremental = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  if (!pid) return
+  try {
+    const res = await ApiService.syncMemoryProfileGroup(pid, memoryBindGroupId.value || '')
+    const added = Number(res.data?.added || 0)
+    ElMessage.success(`同步完成，新增 ${added} 条`)
+    await loadMemoryProfiles()
+    await loadMemoryPreviewContext()
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const generateMemoryPortraitDraft = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  if (!pid) return
+  memoryDraftLoading.value = true
+  try {
+    const res = await ApiService.extractMemoryPortraitDraft(pid, {
+      model: selectedPortraitModel.value || ''
+    })
+    applyMemoryPortrait(res.data?.portrait || {})
+    await loadMemoryProfiles()
+    await loadMemoryPreviewContext()
+    memoryActiveTab.value = 'portrait'
+    ElMessage.success('已生成侧写初稿')
+  } catch (error) {
+    console.error(error)
+  } finally {
+    memoryDraftLoading.value = false
+  }
+}
+
+const saveMemoryPortrait = async () => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  if (!pid) return
+  try {
+    await ApiService.updateMemoryPortrait(pid, {
+      methodology: memoryPortraitForm.value.methodology,
+      tactics: memoryPortraitForm.value.tactics,
+      views: memoryPortraitForm.value.views,
+      operations: memoryPortraitForm.value.operations,
+      risk_rules: memoryPortraitForm.value.risk_rules,
+      style_constraints: memoryPortraitForm.value.style_constraints
+    })
+    await loadMemoryProfiles()
+    await loadMemoryPreviewContext()
+    ElMessage.success('长期记忆侧写已保存')
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const exportMemoryPortrait = async (format) => {
+  const pid = String(memoryManageProfileId.value || '').trim()
+  const fmt = String(format || 'md').trim().toLowerCase()
+  if (!pid || !['md', 'docx', 'pdf'].includes(fmt)) return
+  try {
+    const blob = await ApiService.exportMemoryPortrait(pid, {
+      format: fmt,
+      portrait: {
+        methodology: memoryPortraitForm.value.methodology,
+        tactics: memoryPortraitForm.value.tactics,
+        views: memoryPortraitForm.value.views,
+        operations: memoryPortraitForm.value.operations,
+        risk_rules: memoryPortraitForm.value.risk_rules,
+        style_constraints: memoryPortraitForm.value.style_constraints
+      }
+    })
+    const profileName = currentMemoryProfile.value?.name || 'memory_portrait'
+    const filename = buildSafeFilename(`${profileName}_人物侧写`, fmt)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error(error)
   }
 }
 
@@ -1375,7 +1924,6 @@ const hydrateKeyBoardFromStrategy = (strategy) => {
     64
   )
   keyLevelWindowDays.value = Number(board.window_days || 3650) || 3650
-  keyLevelMethodVer.value = (board.method_ver || 'v1').trim() || 'v1'
 }
 
 const persistKeyBoardState = async () => {
@@ -1396,8 +1944,7 @@ const persistKeyBoardState = async () => {
     })),
     selected_code: keySelectedCode.value || '',
     pane_width_percent: keyPaneWidthPercent.value,
-    window_days: keyLevelWindowDays.value,
-    method_ver: keyLevelMethodVer.value
+    window_days: keyLevelWindowDays.value
   }
 
   try {
@@ -1513,7 +2060,7 @@ const loadKeyStockKline = async (stockCode) => {
   try {
     const [klineResp, levelsResp] = await Promise.all([
       ApiService.getStockKline(code, 3650, null, 'data'),
-      ApiService.getStockLevels(code, keyLevelWindowDays.value, null, keyLevelMethodVer.value)
+      ApiService.getStockLevels(code, keyLevelWindowDays.value, null)
     ])
 
     const rows = klineResp?.data?.data?.kline_data || []
@@ -1582,9 +2129,30 @@ const startKeyPaneResize = (event) => {
 const loadRuntime = async () => {
   const res = await ApiService.getStrategyRuntime()
   runtime.value = res.data || runtime.value
+
+  const runtimeOptions = normalizeModelOptions(runtime.value.model_options || [])
+  if (runtimeOptions.length) {
+    modelOptions.value = runtimeOptions
+  }
+
   const candidateModel = runtime.value.model
-  if (candidateModel && modelOptions.some(item => item.value === candidateModel)) {
+  if (candidateModel) {
+    if (!modelOptions.value.some(item => item.value === candidateModel)) {
+      modelOptions.value.push({ label: candidateModel, value: candidateModel })
+    }
     selectedModel.value = candidateModel
+  }
+
+  const candidatePortraitModel = runtime.value.portrait_model || candidateModel
+  if (candidatePortraitModel) {
+    if (!modelOptions.value.some(item => item.value === candidatePortraitModel)) {
+      modelOptions.value.push({ label: candidatePortraitModel, value: candidatePortraitModel })
+    }
+    selectedPortraitModel.value = candidatePortraitModel
+  }
+
+  if (!selectedPortraitModel.value) {
+    selectedPortraitModel.value = selectedModel.value || (modelOptions.value[0]?.value || '')
   }
   if (!selectedAgentName.value && runtime.value.agents?.length) {
     selectedAgentName.value = runtime.value.agents[0].name
@@ -1664,8 +2232,9 @@ const deleteConversation = async (conversationId) => {
   }
 }
 
-const loadResources = async () => {
-  const res = await ApiService.getStrategyResources()
+const loadResources = async (silent = false) => {
+  const config = silent ? { hideLoading: true } : undefined
+  const res = await ApiService.getStrategyResources(config)
   const payload = res.data || {}
   resources.value = Array.isArray(payload) ? payload : (payload.resources || [])
   resourceGroups.value = Array.isArray(payload) ? [] : (payload.groups || [])
@@ -1700,9 +2269,10 @@ const loadResources = async () => {
   }
 }
 
-const loadJobs = async () => {
+const loadJobs = async (silent = false) => {
   try {
-    const res = await ApiService.listStrategyResourceJobs()
+    const config = silent ? { hideLoading: true } : undefined
+    const res = await ApiService.listStrategyResourceJobs(config)
     jobList.value = Array.isArray(res.data) ? res.data : (res.data || [])
   } catch (error) {
     console.error(error)
@@ -1731,7 +2301,7 @@ const pollJobsOnce = async () => {
   const results = await Promise.all(
     jobIds.map(async id => {
       try {
-        const res = await ApiService.getStrategyResourceJob(id)
+        const res = await ApiService.getStrategyResourceJob(id, { hideLoading: true })
         return { id, job: res.data }
       } catch (error) {
         const status = error?.response?.status
@@ -1754,8 +2324,8 @@ const pollJobsOnce = async () => {
       done.add(item.id)
     }
   })
-    await loadResources()
-    await loadJobs()
+    await loadResources(true)
+    await loadJobs(true)
     uploadJobs.value = uploadJobs.value.filter(id => !done.has(id))
     if (!uploadJobs.value.length) stopJobPolling()
   } catch (error) {
@@ -2481,6 +3051,7 @@ const sendMessage = async () => {
     agent_name: selectedAgentName.value,
     model: selectedModel.value,
     strategy_id: activeStrategyId.value || '',
+    memory_profile_id: activeMemoryProfileId.value || '',
     prompt_template_id: selectedPromptTemplateId.value,
     prompt_template: effectivePromptTemplate.value
   }
@@ -2533,6 +3104,7 @@ onMounted(async () => {
   try {
     await loadRuntime()
     await loadResources()
+    await loadMemoryProfiles()
     await loadConversations()
     if (!conversations.value.length) await createConversation()
     await loadStrategies()
@@ -2545,6 +3117,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   groupPopoverVisible.value = false
   promptTemplatePopoverVisible.value = false
+  memoryManageVisible.value = false
   stopJobPolling()
   stopKeyPaneResize()
 })
@@ -2560,6 +3133,37 @@ watch([activeStrategyId, activeMode], () => {
   if (activeMode.value !== 'chat') groupPopoverVisible.value = false
   if (activeMode.value !== 'chat') promptTemplatePopoverVisible.value = false
   loadWatchWidgets()
+})
+
+watch(memoryManageProfileId, async (nextId) => {
+  memoryBindSelectedIds.value = []
+  if (!nextId) {
+    resetMemoryPortraitForm()
+    memoryPreviewContext.value = ''
+    return
+  }
+  await loadMemoryPortrait(nextId)
+  await loadMemoryPreviewContext()
+})
+
+watch(memoryBindResources, () => {
+  const valid = new Set(memoryBindResources.value.map(item => item.id))
+  memoryBindSelectedIds.value = memoryBindSelectedIds.value.filter(id => valid.has(id))
+})
+
+watch(selectedModel, (nextVal) => {
+  if (!selectedPortraitModel.value) {
+    selectedPortraitModel.value = nextVal || ''
+  }
+})
+
+watch(activeMemoryProfileId, async (nextId, prevId) => {
+  if (nextId === prevId) return
+  try {
+    await ApiService.setActiveMemoryProfile(nextId || '')
+  } catch (error) {
+    console.error(error)
+  }
 })
 </script>
 
@@ -2845,8 +3449,19 @@ watch([activeStrategyId, activeMode], () => {
   min-height: 0;
 }
 
+.chat-card {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-card :deep(.el-card__header) {
+  flex-shrink: 0;
+}
+
 .chat-card :deep(.el-card__body) {
-  height: calc(100% - 16px);
+  flex: 1;
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3069,18 +3684,26 @@ watch([activeStrategyId, activeMode], () => {
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
+  padding-top: 6px;
+  border-top: 1px solid #ebedf1;
 }
 
 .composer-tools {
   display: flex;
   gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
 }
 
 .composer-input {
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 10px;
-  align-items: end;
+  align-items: start;
+}
+
+.composer-input .el-button {
+  align-self: start;
 }
 
 .prompt-edit-btn {
@@ -3527,6 +4150,61 @@ watch([activeStrategyId, activeMode], () => {
   color: #1f7aa2;
 }
 
+.memory-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.memory-bind-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.memory-bind-list {
+  border: 1px solid #e9eef3;
+  border-radius: 10px;
+  padding: 10px;
+  max-height: 420px;
+  overflow: auto;
+  background: #fff;
+}
+
+.memory-checkbox-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-bind-item {
+  border: 1px solid #edf1f7;
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.memory-bind-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #243447;
+}
+
+.memory-bind-meta {
+  font-size: 12px;
+  color: #7c8796;
+}
+
+.memory-portrait-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
 @media (max-width: 1180px) {
   .page-body {
     grid-template-columns: 1fr;
@@ -3539,7 +4217,7 @@ watch([activeStrategyId, activeMode], () => {
   }
 
   .composer-tools {
-    flex-direction: column;
+    flex-wrap: wrap;
   }
 
   .header-actions {
@@ -3553,6 +4231,10 @@ watch([activeStrategyId, activeMode], () => {
 
   .manage-group-list {
     flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .memory-toolbar {
     flex-wrap: wrap;
   }
 
@@ -3578,6 +4260,16 @@ watch([activeStrategyId, activeMode], () => {
 
   .key-chart-panel {
     min-width: 0;
+  }
+}
+
+@media (max-width: 860px) {
+  .composer-input {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-input .el-button {
+    width: 100%;
   }
 }
 </style>

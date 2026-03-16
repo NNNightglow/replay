@@ -155,8 +155,8 @@ class ApiService {
     return api.get('/api/stocks/kline', { params })
   }
 
-  static async getStockLevels(stockCode, windowDays = 3650, date = null, methodVer = 'v1') {
-    const params = { code: stockCode, window: windowDays, method_ver: methodVer }
+  static async getStockLevels(stockCode, windowDays = 3650, date = null) {
+    const params = { code: stockCode, window: windowDays }
     if (date) params.date = this.formatDateForAPI(date)
     return api.get('/api/stocks/levels', { params })
   }
@@ -408,8 +408,8 @@ class ApiService {
     }
   }
 
-  static async getStrategyResources() {
-    return api.get('/api/strategy-watch/resources')
+  static async getStrategyResources(config = {}) {
+    return api.get('/api/strategy-watch/resources', config)
   }
 
   static async uploadStrategyResources(formData) {
@@ -418,12 +418,12 @@ class ApiService {
     })
   }
 
-  static async getStrategyResourceJob(jobId) {
-    return api.get(`/api/strategy-watch/resources/jobs/${jobId}`)
+  static async getStrategyResourceJob(jobId, config = {}) {
+    return api.get(`/api/strategy-watch/resources/jobs/${jobId}`, config)
   }
 
-  static async listStrategyResourceJobs() {
-    return api.get('/api/strategy-watch/resources/jobs')
+  static async listStrategyResourceJobs(config = {}) {
+    return api.get('/api/strategy-watch/resources/jobs', config)
   }
 
   static async renameStrategyResourceGroup(groupId, groupName) {
@@ -484,6 +484,70 @@ class ApiService {
 
   static async generateStrategyWatchView(strategyId, payload = {}) {
     return api.post(`/api/strategy-watch/strategies/${strategyId}/generate-view`, payload)
+  }
+
+  static async getMemoryProfiles() {
+    return api.get('/api/strategy-watch/memory-profiles')
+  }
+
+  static async createMemoryProfile(payload = {}) {
+    return api.post('/api/strategy-watch/memory-profiles', payload)
+  }
+
+  static async updateMemoryProfile(profileId, payload = {}) {
+    return api.patch(`/api/strategy-watch/memory-profiles/${profileId}`, payload)
+  }
+
+  static async deleteMemoryProfile(profileId) {
+    return api.delete(`/api/strategy-watch/memory-profiles/${profileId}`)
+  }
+
+  static async setActiveMemoryProfile(profileId) {
+    return api.patch('/api/strategy-watch/memory-profiles/active', { profile_id: profileId || '' })
+  }
+
+  static async bindMemoryProfileResources(profileId, resourceIds = []) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/bind-resources`, {
+      resource_ids: Array.isArray(resourceIds) ? resourceIds : []
+    })
+  }
+
+  static async bindMemoryProfileGroup(profileId, groupId) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/bind-group`, {
+      group_id: groupId || ''
+    })
+  }
+
+  static async syncMemoryProfileGroup(profileId, groupId = '') {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/sync-group`, {
+      group_id: groupId || ''
+    })
+  }
+
+  static async extractMemoryPortraitDraft(profileId, payload = {}) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/extract-portrait-draft`, payload, {
+      timeout: LONG_TASK_TIMEOUT_MS
+    })
+  }
+
+  static async getMemoryPortrait(profileId) {
+    return api.get(`/api/strategy-watch/memory-profiles/${profileId}/portrait`)
+  }
+
+  static async updateMemoryPortrait(profileId, payload = {}) {
+    return api.patch(`/api/strategy-watch/memory-profiles/${profileId}/portrait`, payload)
+  }
+
+  static async exportMemoryPortrait(profileId, payload = {}) {
+    return api.post(`/api/strategy-watch/memory-profiles/${profileId}/portrait/export`, payload, {
+      responseType: 'blob',
+      hideLoading: true,
+      timeout: LONG_TASK_TIMEOUT_MS
+    })
+  }
+
+  static async previewMemoryProfileContext(profileId) {
+    return api.get(`/api/strategy-watch/memory-profiles/${profileId}/preview-context`)
   }
 
   static async triggerManualUpdate(target) {
