@@ -51,11 +51,9 @@ DEFAULT_STRATEGY_VIEW = "basic"
 DEFAULT_MODEL_OPTIONS = [
     {"label": "DeepSeek v3.2", "value": "deepseek-v3.2"},
     {"label": "DeepSeek v3.2 Thinking", "value": "deepseek-v3.2-thinking"},
-    {"label": "DeepSeek v3.1", "value": "deepseek-v3.1"},
-    {"label": "Qwen Max", "value": "qwen-max"},
-    {"label": "QVQ Max", "value": "qvq-max"},
-    {"label": "GPT-3.5 Turbo", "value": "gpt-3.5-turbo"},
+    {"label": "qwen-max", "value": "qwen-max"},
 ]
+ALLOWED_RUNTIME_MODEL_VALUES = {item["value"] for item in DEFAULT_MODEL_OPTIONS}
 
 _DATE_YMD_SEP_PATTERN = re.compile(r"(?<!\d)(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?(?!\d)")
 _DATE_YMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
@@ -129,11 +127,12 @@ def _get_runtime_model_options() -> List[Dict[str, str]]:
                 label, value = token.split(":", 1)
                 label = label.strip()
                 value = _canonical_model_name(value.strip())
-                if value:
+                if value and value in ALLOWED_RUNTIME_MODEL_VALUES:
                     parsed.append({"label": label or value, "value": value})
             else:
                 normalized = _canonical_model_name(token)
-                parsed.append({"label": normalized, "value": normalized})
+                if normalized in ALLOWED_RUNTIME_MODEL_VALUES:
+                    parsed.append({"label": normalized, "value": normalized})
 
     base = parsed if parsed else list(DEFAULT_MODEL_OPTIONS)
 
@@ -141,14 +140,14 @@ def _get_runtime_model_options() -> List[Dict[str, str]]:
         _canonical_model_name((os.getenv("OPENAI_MODEL") or "").strip()),
         _canonical_model_name((os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip()),
     ):
-        if extra_value:
+        if extra_value and extra_value in ALLOWED_RUNTIME_MODEL_VALUES:
             base.append({"label": extra_value, "value": extra_value})
 
     seen = set()
     out: List[Dict[str, str]] = []
     for item in base:
         value = (item.get("value") or "").strip()
-        if not value or value in seen:
+        if not value or value in seen or value not in ALLOWED_RUNTIME_MODEL_VALUES:
             continue
         seen.add(value)
         label = (item.get("label") or value).strip() or value
@@ -1997,11 +1996,15 @@ def _copy_resource_record(item: Dict, target_group_id: str, target_name: str) ->
 @strategy_watch_bp.route("/api/strategy-watch/runtime", methods=["GET"])
 def strategy_watch_runtime():
     _load_env_files()
-    model_default = _canonical_model_name(os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
+    model_default = _canonical_model_name(os.getenv("OPENAI_MODEL") or "deepseek-v3.2")
+    if model_default not in ALLOWED_RUNTIME_MODEL_VALUES:
+        model_default = "deepseek-v3.2"
     portrait_model_default = (
         _canonical_model_name((os.getenv("OPENAI_PORTRAIT_MODEL") or "").strip())
         or model_default
     )
+    if portrait_model_default not in ALLOWED_RUNTIME_MODEL_VALUES:
+        portrait_model_default = model_default
     return jsonify(
         {
             "success": True,

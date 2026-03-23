@@ -979,12 +979,9 @@ const groupTransferForm = ref({
 
 const selectedAgentName = ref('planner_agent')
 const DEFAULT_MODEL_OPTIONS = [
-  { label: 'DeepSeek v3.2', value: 'deepseek-v3.2' },
+  { label: 'DeepSeek v3.2', value: 'DeepSeek3.2' },
   { label: 'DeepSeek v3.2 Thinking', value: 'deepseek-v3.2-thinking' },
-  { label: 'DeepSeek v3.1', value: 'deepseek-v3.1' },
   { label: '通义千问 qwen-max', value: 'qwen-max' },
-  { label: '通义千问 qvq-max', value: 'qvq-max' },
-  { label: 'GPT-3.5 Turbo', value: 'gpt-3.5-turbo' }
 ]
 const normalizeModelOptions = (rawOptions = []) => {
   const out = []

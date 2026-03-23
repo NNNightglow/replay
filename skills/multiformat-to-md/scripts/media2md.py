@@ -255,6 +255,16 @@ def _split_long_paragraph(text: str, max_len: int) -> List[str]:
     return chunks
 
 
+def _format_readable_lines(text: str) -> str:
+    text = (text or "").replace("\r\n", "\n").strip()
+    if not text:
+        return ""
+    # Keep chunk/paragraph readability by inserting line breaks after sentence-ending punctuation.
+    text = re.sub(r"([。！？!?；;])(?=[^\n])", r"\1\n", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def _build_rewrite_prompt(paragraph: str) -> str:
     return (
         "下面是一段音视频转写文本，请在不丢失信息的前提下做文字整理。\n"
@@ -304,7 +314,7 @@ def rewrite_markdown_with_llm(input_path: Path, output_path: Path, max_chunk_len
         for chunk in chunks:
             rewritten = _call_llm(
                 messages=[
-                    {"role": "system", "content": "You are a careful Chinese text editing assistant."},
+                    {"role": "system", "content": "你是一个细心的中文文本纠正员，请在不丢失信息的前提下做文字整理。请用简体中文回答。"},
                     {"role": "user", "content": _build_rewrite_prompt(chunk)},
                 ],
                 model=model,
@@ -315,8 +325,9 @@ def rewrite_markdown_with_llm(input_path: Path, output_path: Path, max_chunk_len
             rewritten_chunks.append(rewritten)
             if sleep_ms > 0:
                 time.sleep(sleep_ms / 1000.0)
-        merged = re.sub(r"\n{2,}", "\n", "".join(rewritten_chunks).strip())
-        rewritten_parts.append(merged if merged else para.strip())
+        merged_chunks = [_format_readable_lines(item) for item in rewritten_chunks if (item or "").strip()]
+        merged = "\n\n".join(merged_chunks).strip()
+        rewritten_parts.append(merged if merged else _format_readable_lines(para.strip()))
 
     new_content = "\n\n".join([p for p in rewritten_parts if p]).strip()
     src_len = len(content.strip())
