@@ -20,8 +20,13 @@
 - outputs: 期望输出
 - acceptance_criteria: 验收标准
 - priority: P0/P1/P2
+- block_reason: 当 requirements_ready=false 时必填，说明“为什么现在不能进入架构拆解”
 - unknowns: 待确认项（列表）
 - next_questions: 若未就绪，给下一轮问题（列表）
 
 交接规则
 - 当 requirements_ready=true 时，明确写“请交给 architect_agent 进行任务分解与执行编排”。
+
+额外约束
+- 未就绪时，next_questions 只给最小必要问题（1-3条），不要展开实现方案。
+- 即使用户界面只展示 next_questions 和 block_reason，你仍需完整输出上述全部字段，供系统写入上下文。

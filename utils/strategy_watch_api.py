@@ -990,10 +990,11 @@ def _process_resource_job(
 
 def _load_resources_payload() -> Dict:
     _ensure_store()
-    raw = _read_json(RESOURCES_FILE, {"resources": [], "active_resource_id": ""})
+    raw = _read_json(RESOURCES_FILE, {"resources": [], "active_resource_id": "", "groups": []})
     if isinstance(raw, list):
-        raw = {"resources": raw, "active_resource_id": ""}
+        raw = {"resources": raw, "active_resource_id": "", "groups": []}
     resources = raw.get("resources", [])
+    manual_groups = _normalize_group_records(raw.get("groups") if isinstance(raw.get("groups"), list) else [])
     normalized: List[Dict] = []
     touched = False
     for item in resources:
@@ -1012,8 +1013,10 @@ def _load_resources_payload() -> Dict:
             normalized.append(normalized_item)
     active_resource_id = (raw.get("active_resource_id") or "").strip()
     if touched:
-        _save_resources_payload({"resources": normalized, "active_resource_id": active_resource_id})
-    return {"resources": normalized, "active_resource_id": active_resource_id}
+        _save_resources_payload(
+            {"resources": normalized, "active_resource_id": active_resource_id, "groups": manual_groups}
+        )
+    return {"resources": normalized, "active_resource_id": active_resource_id, "groups": manual_groups}
 
 
 def _save_resources_payload(payload: Dict) -> None:
@@ -1023,6 +1026,7 @@ def _save_resources_payload(payload: Dict) -> None:
         {
             "resources": payload.get("resources", []),
             "active_resource_id": (payload.get("active_resource_id") or "").strip(),
+            "groups": _normalize_group_records(payload.get("groups") if isinstance(payload.get("groups"), list) else []),
         },
     )
 
@@ -2511,6 +2515,117 @@ def _parse_requirements_ready(pm_text: str) -> bool:
     return False
 
 
+def _normalize_text_list(value: Any) -> List[str]:
+    if isinstance(value, list):
+        out: List[str] = []
+        for item in value:
+            text = str(item or "").strip()
+            if text:
+                out.append(text)
+        return out
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return []
+        parts = re.split(r"(?:\r?\n|[；;])+", text)
+        out = []
+        for part in parts:
+            line = re.sub(r"^\s*(?:[-*•]|\d+[.)、])\s*", "", part.strip())
+            if line:
+                out.append(line)
+        return out
+    return []
+
+
+def _extract_named_list_lines(text: str, field_name: str) -> List[str]:
+    raw = str(text or "")
+    if not raw.strip():
+        return []
+    lines = raw.splitlines()
+    start = -1
+    inline_value = ""
+    pattern = re.compile(rf"""^\s*["'`]?{re.escape(field_name)}["'`]?\s*[:：]\s*(.*)$""", flags=re.IGNORECASE)
+    for idx, line in enumerate(lines):
+        hit = pattern.match(line)
+        if hit:
+            start = idx
+            inline_value = (hit.group(1) or "").strip()
+            break
+    if start < 0:
+        return []
+
+    out: List[str] = []
+    if inline_value and inline_value not in {"[]", "null", "None"}:
+        if inline_value.startswith("[") and inline_value.endswith("]"):
+            try:
+                parsed = json.loads(inline_value)
+                return _normalize_text_list(parsed)
+            except Exception:
+                pass
+        out.extend(_normalize_text_list(inline_value))
+
+    next_key_pattern = re.compile(r"^\s*[a-zA-Z_][a-zA-Z0-9_]*\s*[:：]")
+    for line in lines[start + 1 :]:
+        if next_key_pattern.match(line):
+            break
+        item = re.sub(r"^\s*(?:[-*•]|\d+[.)、])\s*", "", line.strip())
+        if item:
+            out.append(item)
+    return out
+
+
+def _extract_pm_requirements_package(pm_text: str) -> Dict[str, Any]:
+    parsed: Dict[str, Any] = {
+        "requirements_ready": _parse_requirements_ready(pm_text),
+        "block_reason": "",
+        "next_questions": [],
+        "unknowns": [],
+        "raw_text": str(pm_text or ""),
+    }
+    payload = _extract_json_payload(pm_text)
+
+    if isinstance(payload, dict):
+        parsed["next_questions"] = _normalize_text_list(payload.get("next_questions"))
+        parsed["unknowns"] = _normalize_text_list(payload.get("unknowns"))
+        block_reason = (
+            payload.get("block_reason")
+            or payload.get("blocking_reason")
+            or payload.get("cannot_proceed_reason")
+            or ""
+        )
+        parsed["block_reason"] = str(block_reason or "").strip()
+
+    if not parsed["next_questions"]:
+        parsed["next_questions"] = _extract_named_list_lines(pm_text, "next_questions")
+    if not parsed["unknowns"]:
+        parsed["unknowns"] = _extract_named_list_lines(pm_text, "unknowns")
+    if not parsed["block_reason"]:
+        hit = re.search(
+            r"""["'`]?block_reason["'`]?\s*[:：]\s*(.+)""",
+            str(pm_text or ""),
+            flags=re.IGNORECASE,
+        )
+        if hit:
+            parsed["block_reason"] = str(hit.group(1) or "").strip()
+    if not parsed["block_reason"] and parsed["unknowns"]:
+        parsed["block_reason"] = "关键约束未补齐：" + "；".join(parsed["unknowns"][:2])
+
+    parsed["next_questions"] = parsed["next_questions"][:3]
+    return parsed
+
+
+def _extract_latest_pm_context(history_messages: List[Dict[str, Any]]) -> str:
+    for item in reversed(history_messages or []):
+        if not isinstance(item, dict):
+            continue
+        meta = item.get("orchestration_meta")
+        if isinstance(meta, dict):
+            pm_text = str(meta.get("pm_requirements_raw") or "").strip()
+            if pm_text:
+                return pm_text
+    return ""
+
+
 def _normalize_orchestration_task(item: Any, index: int) -> Optional[Dict[str, Any]]:
     if not isinstance(item, dict):
         return None
@@ -2580,12 +2695,14 @@ def _run_strategy_edit_orchestration(
     model_name: str,
     temperature: float,
     trace_context: Dict[str, Any],
-) -> Tuple[str, str, str, Dict[str, Any], str]:
+) -> Tuple[str, str, str, Dict[str, Any], str, Dict[str, Any]]:
     stage_history = list(history_messages or [])
+    previous_pm_context = _extract_latest_pm_context(history_messages)
     resolved_model = _canonical_model_name(model_name or (os.getenv("OPENAI_MODEL") or "gpt-4o-mini"))
     provider = "orchestration"
     usage: Dict[str, Any] = {}
     flow_error = ""
+    orchestration_meta: Dict[str, Any] = {}
 
     def _run_stage(
         stage_name: str,
@@ -2652,6 +2769,14 @@ def _run_strategy_edit_orchestration(
         "你现在处于【需求澄清阶段】。\n"
         "请先判断用户需求是否足够清晰可执行，并必须输出 requirements_ready 字段。\n"
         "若不清晰，请给出 next_questions（最多3条）。\n\n"
+        "若 requirements_ready=false，必须给出 block_reason（不能进入架构拆解的原因）。\n\n"
+        + (
+            "上一轮 PM 需求包（用于延续上下文）：\n"
+            f"{_clip_text(previous_pm_context, max_chars=2600)}\n\n"
+            if previous_pm_context
+            else ""
+        )
+        +
         "用户原始需求：\n"
         f"{llm_user_content}"
     )
@@ -2664,24 +2789,48 @@ def _run_strategy_edit_orchestration(
             provider,
             usage,
             flow_error,
+            orchestration_meta,
         )
 
-    requirements_ready = _parse_requirements_ready(pm_text)
+    requirements_pkg = _extract_pm_requirements_package(pm_text)
+    requirements_ready = bool(requirements_pkg.get("requirements_ready"))
+    orchestration_meta = {
+        "requirements_ready": requirements_ready,
+        "pm_requirements_raw": pm_text,
+        "pm_requirements": {
+            "block_reason": requirements_pkg.get("block_reason") or "",
+            "next_questions": requirements_pkg.get("next_questions") or [],
+            "unknowns": requirements_pkg.get("unknowns") or [],
+        },
+    }
     _append_agent_log(
         "orchestration_requirements_ready_parsed",
         {
             **(trace_context or {}),
             "requirements_ready": requirements_ready,
+            "block_reason": requirements_pkg.get("block_reason") or "",
+            "next_questions": requirements_pkg.get("next_questions") or [],
             "pm_output_preview": _clip_text(pm_text, max_chars=600),
         },
     )
     if not requirements_ready:
-        waiting_text = (
-            "【阶段1：PM需求澄清】\n"
-            f"{pm_text}\n\n"
-            "当前 requirements_ready=false。请先回答 PM 的澄清问题，随后我再进入 ToDo 分解与逐步执行。"
-        )
-        return waiting_text, resolved_model, provider, usage, ""
+        reason = (requirements_pkg.get("block_reason") or "").strip() or "关键约束信息不完整。"
+        questions = requirements_pkg.get("next_questions") or []
+        lines = [
+            "【PM需求澄清】",
+            f"当前无法进入架构拆解：{reason}",
+            "",
+            "请补充以下最小必要信息：",
+        ]
+        if questions:
+            for idx, q in enumerate(questions, start=1):
+                lines.append(f"{idx}. {q}")
+        else:
+            lines.append("1. 请补充目标范围、输入输出和验收标准。")
+        lines.append("")
+        lines.append("补充后我会自动转交 architect_agent 进行任务分解与执行编排。")
+        waiting_text = "\n".join(lines).strip()
+        return waiting_text, resolved_model, provider, usage, "", orchestration_meta
 
     plan_prompt = (
         "你现在处于【任务分解阶段】。\n"
@@ -2715,6 +2864,7 @@ def _run_strategy_edit_orchestration(
             provider,
             usage,
             flow_error,
+            orchestration_meta,
         )
 
     tasks = _parse_todo_tasks(plan_text)
@@ -2724,7 +2874,7 @@ def _run_strategy_edit_orchestration(
             f"{plan_text}\n\n"
             "未解析到可执行 tasks，请让 Architect 按约定 JSON 结构返回 ToDo。"
         )
-        return no_task_text, resolved_model, provider, usage, ""
+        return no_task_text, resolved_model, provider, usage, "", orchestration_meta
 
     task_results: List[Dict[str, Any]] = []
     for idx, task in enumerate(tasks, start=1):
@@ -2794,7 +2944,7 @@ def _run_strategy_edit_orchestration(
     if flow_error:
         lines.append(f"流程警告：{flow_error}")
 
-    return "\n".join(lines).strip(), resolved_model, provider, usage, flow_error
+    return "\n".join(lines).strip(), resolved_model, provider, usage, flow_error, orchestration_meta
 
 
 def _resolve_strategy_name(strategy_id: str) -> str:
@@ -2909,8 +3059,45 @@ def _build_crawler_agent_summary(crawl_results: List[Dict]) -> str:
     return "\n".join(lines)
 
 
-def _summarize_resource_groups(resources: List[Dict]) -> List[Dict]:
+def _normalize_group_records(groups: List[Dict]) -> List[Dict]:
+    normalized: List[Dict] = []
+    seen_ids = set()
+    seen_names = set()
+    for item in groups or []:
+        if not isinstance(item, dict):
+            continue
+        group_id = (item.get("group_id") or "").strip()
+        group_name = (item.get("group_name") or "").strip()
+        if not group_id or not group_name:
+            continue
+        lowered = group_name.lower()
+        if group_id in seen_ids or lowered in seen_names:
+            continue
+        seen_ids.add(group_id)
+        seen_names.add(lowered)
+        normalized.append(
+            {
+                "group_id": group_id,
+                "group_name": group_name,
+                "updated_at": (item.get("updated_at") or "").strip(),
+            }
+        )
+    return normalized
+
+
+def _summarize_resource_groups(resources: List[Dict], manual_groups: Optional[List[Dict]] = None) -> List[Dict]:
     groups: Dict[str, Dict] = {}
+    for item in manual_groups or []:
+        group_id = (item.get("group_id") or "").strip()
+        group_name = (item.get("group_name") or "").strip()
+        if not group_id or not group_name:
+            continue
+        groups[group_id] = {
+            "group_id": group_id,
+            "group_name": group_name,
+            "count": 0,
+            "updated_at": (item.get("updated_at") or "").strip(),
+        }
     for item in resources:
         group_id = item.get("group_id") or f"legacy_{DEFAULT_GROUP_NAME}"
         group_name = item.get("group_name") or DEFAULT_GROUP_NAME
@@ -2923,6 +3110,8 @@ def _summarize_resource_groups(resources: List[Dict]) -> List[Dict]:
                 "updated_at": item.get("uploaded_at") or "",
             }
             groups[group_id] = group
+        elif group_name:
+            group["group_name"] = group_name
         group["count"] += 1
         uploaded_at = item.get("uploaded_at") or ""
         if uploaded_at and uploaded_at > (group.get("updated_at") or ""):
@@ -2930,21 +3119,24 @@ def _summarize_resource_groups(resources: List[Dict]) -> List[Dict]:
     return sorted(groups.values(), key=lambda x: x.get("updated_at", ""), reverse=True)
 
 
-def _find_group_by_name(resources: List[Dict], group_name: str) -> Tuple[str, str]:
+def _find_group_by_name(resources: List[Dict], group_name: str, groups: Optional[List[Dict]] = None) -> Tuple[str, str]:
     target = (group_name or "").strip()
     if not target:
         return "", ""
+    for item in groups or []:
+        if (item.get("group_name") or "").strip() == target:
+            return (item.get("group_id") or "").strip(), target
     for item in resources:
         if (item.get("group_name") or "").strip() == target:
             return (item.get("group_id") or "").strip(), target
     return "", ""
 
 
-def _resolve_group_id_by_name(resources: List[Dict], group_name: str) -> str:
+def _resolve_group_id_by_name(resources: List[Dict], group_name: str, groups: Optional[List[Dict]] = None) -> str:
     target = (group_name or "").strip()
     if not target:
         return ""
-    existing_id, _ = _find_group_by_name(resources, target)
+    existing_id, _ = _find_group_by_name(resources, target, groups)
     if existing_id:
         return existing_id
     return _gen_id("group")
@@ -3046,6 +3238,7 @@ def list_strategy_resources():
     with _STORE_LOCK:
         payload = _load_resources_payload()
         resources = payload.get("resources", [])
+        groups = payload.get("groups", [])
         active_resource_id = payload.get("active_resource_id") or ""
     resources = sorted(resources, key=lambda x: x.get("uploaded_at", ""), reverse=True)
     return jsonify(
@@ -3053,7 +3246,7 @@ def list_strategy_resources():
             "success": True,
             "data": {
                 "resources": resources,
-                "groups": _summarize_resource_groups(resources),
+                "groups": _summarize_resource_groups(resources, groups),
                 "active_resource_id": active_resource_id,
             },
             "timestamp": _now_iso(),
@@ -3085,9 +3278,12 @@ def upload_strategy_resources():
     with _STORE_LOCK:
         payload = _load_resources_payload()
         resources = payload.get("resources", [])
+        groups = payload.get("groups", [])
 
-        existing_group_id = _resolve_group_id_by_name(resources, group_name)
+        existing_group_id = _resolve_group_id_by_name(resources, group_name, groups)
         group_id = existing_group_id or _gen_id("group")
+        if not any((item.get("group_id") or "").strip() == group_id for item in groups):
+            groups.append({"group_id": group_id, "group_name": group_name, "updated_at": _now_iso()})
 
         for file_storage in files:
             original_name = (file_storage.filename or "").strip()
@@ -3147,6 +3343,7 @@ def upload_strategy_resources():
             )
 
         payload["resources"] = resources
+        payload["groups"] = groups
         _save_resources_payload(payload)
 
     for item in to_process:
@@ -3329,6 +3526,35 @@ def download_crawled_file():
     return send_file(file_path, as_attachment=True, download_name=file_path.name)
 
 
+@strategy_watch_bp.route("/api/strategy-watch/resource-groups", methods=["POST"])
+def create_strategy_resource_group():
+    payload = request.get_json(silent=True) or {}
+    group_name = (payload.get("group_name") or payload.get("name") or "").strip()
+    if not group_name:
+        return jsonify({"success": False, "error": "组名不能为空", "timestamp": _now_iso()}), 400
+
+    with _STORE_LOCK:
+        resources_payload = _load_resources_payload()
+        resources = resources_payload.get("resources", [])
+        groups = resources_payload.get("groups", [])
+        existing_id, _ = _find_group_by_name(resources, group_name, groups)
+        if existing_id:
+            return jsonify({"success": False, "error": "组名已存在", "timestamp": _now_iso()}), 400
+
+        group_id = _gen_id("group")
+        groups.append({"group_id": group_id, "group_name": group_name, "updated_at": _now_iso()})
+        resources_payload["groups"] = groups
+        _save_resources_payload(resources_payload)
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {"group_id": group_id, "group_name": group_name},
+            "timestamp": _now_iso(),
+        }
+    )
+
+
 @strategy_watch_bp.route("/api/strategy-watch/resource-groups/<string:group_id>", methods=["PATCH"])
 def rename_strategy_resource_group(group_id: str):
     payload = request.get_json(silent=True) or {}
@@ -3339,7 +3565,8 @@ def rename_strategy_resource_group(group_id: str):
     with _STORE_LOCK:
         resources_payload = _load_resources_payload()
         resources = resources_payload.get("resources", [])
-        existing_id, _ = _find_group_by_name(resources, group_name)
+        groups = resources_payload.get("groups", [])
+        existing_id, _ = _find_group_by_name(resources, group_name, groups)
         if existing_id and existing_id != group_id:
             return jsonify({"success": False, "error": "组名已存在", "timestamp": _now_iso()}), 400
         updated = 0
@@ -3347,9 +3574,20 @@ def rename_strategy_resource_group(group_id: str):
             if item.get("group_id") == group_id:
                 item["group_name"] = group_name
                 updated += 1
-        if updated == 0:
+        group_updated = False
+        for item in groups:
+            if (item.get("group_id") or "").strip() == group_id:
+                item["group_name"] = group_name
+                item["updated_at"] = _now_iso()
+                group_updated = True
+                break
+        if not group_updated and updated > 0:
+            groups.append({"group_id": group_id, "group_name": group_name, "updated_at": _now_iso()})
+            group_updated = True
+        if updated == 0 and not group_updated:
             return jsonify({"success": False, "error": "资源组不存在", "timestamp": _now_iso()}), 404
         resources_payload["resources"] = resources
+        resources_payload["groups"] = groups
         _save_resources_payload(resources_payload)
 
     return jsonify(
@@ -3378,18 +3616,25 @@ def transfer_strategy_resource_group():
     with _STORE_LOCK:
         resources_payload = _load_resources_payload()
         resources = resources_payload.get("resources", [])
+        groups = resources_payload.get("groups", [])
         source_items = [item for item in resources if item.get("group_id") == source_group_id]
-        if not source_items:
+        source_group_exists = any((item.get("group_id") or "").strip() == source_group_id for item in groups)
+        if not source_items and not source_group_exists:
             return jsonify({"success": False, "error": "源分组不存在", "timestamp": _now_iso()}), 404
 
         if target_group_id:
             target_name = next(
-                (item.get("group_name") for item in resources if item.get("group_id") == target_group_id), ""
+                (item.get("group_name") for item in groups if (item.get("group_id") or "").strip() == target_group_id),
+                "",
             ).strip()
+            if not target_name:
+                target_name = next(
+                    (item.get("group_name") for item in resources if item.get("group_id") == target_group_id), ""
+                ).strip()
             if not target_name:
                 return jsonify({"success": False, "error": "目标分组不存在", "timestamp": _now_iso()}), 404
         else:
-            existing_id, _ = _find_group_by_name(resources, target_group_name)
+            existing_id, _ = _find_group_by_name(resources, target_group_name, groups)
             if existing_id:
                 target_group_id = existing_id
                 target_name = target_group_name
@@ -3473,6 +3718,9 @@ def transfer_strategy_resource_group():
             resources.extend(new_records)
 
         resources_payload["resources"] = resources
+        if not any((item.get("group_id") or "").strip() == target_group_id for item in groups):
+            groups.append({"group_id": target_group_id, "group_name": target_name, "updated_at": _now_iso()})
+        resources_payload["groups"] = groups
         _save_resources_payload(resources_payload)
 
     return jsonify(
@@ -3512,6 +3760,7 @@ def transfer_strategy_resources():
     with _STORE_LOCK:
         resources_payload = _load_resources_payload()
         resources = resources_payload.get("resources", [])
+        groups = resources_payload.get("groups", [])
         resource_map = {item.get("id"): item for item in resources}
         targets = [resource_map.get(rid) for rid in resource_ids if resource_map.get(rid)]
         if not targets:
@@ -3519,13 +3768,22 @@ def transfer_strategy_resources():
 
         if target_group_id:
             target_name = next(
-                (item.get("group_name") for item in resources if item.get("group_id") == target_group_id),
+                (
+                    item.get("group_name")
+                    for item in groups
+                    if (item.get("group_id") or "").strip() == target_group_id
+                ),
                 "",
             )
             if not target_name:
+                target_name = next(
+                (item.get("group_name") for item in resources if item.get("group_id") == target_group_id),
+                "",
+                )
+            if not target_name:
                 target_name = target_group_name or DEFAULT_GROUP_NAME
         else:
-            existing_id, _ = _find_group_by_name(resources, target_group_name)
+            existing_id, _ = _find_group_by_name(resources, target_group_name, groups)
             if existing_id:
                 target_group_id = existing_id
                 target_name = target_group_name
@@ -3554,6 +3812,9 @@ def transfer_strategy_resources():
             resources.extend(new_records)
 
         resources_payload["resources"] = resources
+        if not any((item.get("group_id") or "").strip() == target_group_id for item in groups):
+            groups.append({"group_id": target_group_id, "group_name": target_name, "updated_at": _now_iso()})
+        resources_payload["groups"] = groups
         _save_resources_payload(resources_payload)
 
     return jsonify(
@@ -4314,6 +4575,7 @@ def send_strategy_message(conversation_id: str):
 
     assistant_text = ""
     error_text = ""
+    orchestration_meta: Dict[str, Any] = {}
     resolved_model = _canonical_model_name(model_name or (os.getenv("OPENAI_MODEL") or "gpt-4o-mini"))
     provider = ""
     usage = {}
@@ -4335,6 +4597,7 @@ def send_strategy_message(conversation_id: str):
                 provider,
                 usage,
                 error_text,
+                orchestration_meta,
             ) = _run_strategy_edit_orchestration(
                 llm_user_content=llm_user_content,
                 history_messages=history_for_conversation,
@@ -4382,6 +4645,7 @@ def send_strategy_message(conversation_id: str):
         "crawl_results": crawl_results,
         "error": bool(error_text),
         "error_message": error_text,
+        "orchestration_meta": orchestration_meta if conversation_mode == "strategy_edit" else {},
     }
 
     with _STORE_LOCK:
@@ -4666,6 +4930,7 @@ def send_strategy_message_stream(conversation_id: str):
 
         if conversation_mode == "strategy_edit":
             assistant_text = ""
+            orchestration_meta: Dict[str, Any] = {}
             try:
                 (
                     assistant_text,
@@ -4673,6 +4938,7 @@ def send_strategy_message_stream(conversation_id: str):
                     provider,
                     usage,
                     error_text,
+                    orchestration_meta,
                 ) = _run_strategy_edit_orchestration(
                     llm_user_content=llm_user_content,
                     history_messages=history_for_conversation,
@@ -4739,6 +5005,7 @@ def send_strategy_message_stream(conversation_id: str):
                 "crawl_results": crawl_results,
                 "error": bool(error_text),
                 "error_message": error_text,
+                "orchestration_meta": orchestration_meta,
             }
             _save_assistant_message(assistant_message)
             _append_agent_log(

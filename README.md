@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![License](https://img.shields.io/badge/license-Non--Commercial-orange.svg)
 ![Python](https://img.shields.io/badge/python-3.9+-green.svg)
 ![Vue](https://img.shields.io/badge/vue-3.0+-brightgreen.svg)
 ![Flask](https://img.shields.io/badge/flask-2.0+-red.svg)
@@ -317,7 +317,7 @@ replay/
 
 ## 📜 开源协议
 
-本项目采用 [MIT License](LICENSE) 开源协议。
+本项目采用“**禁止商用（仅限非商业用途）**”授权协议，详情请见 [LICENSE](LICENSE)。
 
 ---
 
@@ -335,7 +335,7 @@ replay/
 
 <div align="center">
 
-**💡 技术支持** | **📅 最后更新**: 2026-02-27 | **🔄 版本**: v2.0
+**💡 技术支持** | **📅 最后更新**: 2026-03-27 | **🔄 版本**: v2.1
 
 Made with ❤️ by NNNightglow
 寻求合作可联系1968259857@qq.com

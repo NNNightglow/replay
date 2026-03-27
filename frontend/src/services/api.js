@@ -430,6 +430,10 @@ class ApiService {
     return api.patch(`/api/strategy-watch/resource-groups/${groupId}`, { group_name: groupName })
   }
 
+  static async createStrategyResourceGroup(groupName) {
+    return api.post('/api/strategy-watch/resource-groups', { group_name: groupName })
+  }
+
   static async transferStrategyResourceGroup(payload) {
     return api.post('/api/strategy-watch/resource-groups/transfer', payload)
   }

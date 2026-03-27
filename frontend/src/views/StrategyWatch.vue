@@ -708,6 +708,7 @@
             :value="grp.group_id"
           />
         </el-select>
+        <el-button size="small" type="primary" plain @click="createManageGroup">新建分组</el-button>
         <el-button size="small" :disabled="!manageFilterGroupId" @click="renameManageGroup">重命名分组</el-button>
         <el-select v-model="manageTargetGroupId" size="small" style="width: 160px" placeholder="目标分组">
           <el-option
@@ -2447,7 +2448,37 @@ const buildCrawlerAgentSummary = (msg) => {
   return lines.join('\n').trim()
 }
 
+const buildOrchestrationPmSummary = (msg) => {
+  if ((msg?.conversation_mode || '') !== 'strategy_edit') return ''
+  const meta = msg?.orchestration_meta
+  if (!meta || typeof meta !== 'object') return ''
+  if (meta.requirements_ready !== false) return ''
+  const req = meta.pm_requirements && typeof meta.pm_requirements === 'object'
+    ? meta.pm_requirements
+    : {}
+  const reason = String(req.block_reason || '').trim() || '关键约束信息不完整。'
+  const questions = Array.isArray(req.next_questions)
+    ? req.next_questions.map(item => String(item || '').trim()).filter(Boolean).slice(0, 3)
+    : []
+  const lines = [
+    '【PM需求澄清】',
+    `当前无法进入架构拆解：${reason}`,
+    '',
+    '请补充以下最小必要信息：'
+  ]
+  if (questions.length) {
+    questions.forEach((q, idx) => lines.push(`${idx + 1}. ${q}`))
+  } else {
+    lines.push('1. 请补充目标范围、输入输出和验收标准。')
+  }
+  lines.push('')
+  lines.push('补充后我会自动转交 architect_agent 进行任务分解与执行编排。')
+  return lines.join('\n').trim()
+}
+
 const getDisplayedAssistantContent = (msg) => {
+  const orchestrationPmSummary = buildOrchestrationPmSummary(msg)
+  if (orchestrationPmSummary) return orchestrationPmSummary
   if ((msg?.conversation_mode === 'crawler' || msg?.provider === 'crawler') && getCrawlResults(msg).length) {
     return buildCrawlerAgentSummary(msg)
   }
@@ -3448,6 +3479,24 @@ const renameManageGroup = async () => {
     if (!name) return
     await ApiService.renameStrategyResourceGroup(manageFilterGroupId.value, name)
     await loadResources()
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
+const createManageGroup = async () => {
+  try {
+    const { value } = await ElMessageBox.prompt('请输入新分组名称', '新建分组', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const name = (value || '').trim()
+    if (!name) return
+    await ApiService.createStrategyResourceGroup(name)
+    await loadResources()
+    const created = resourceGroups.value.find(g => g.group_name === name)
+    manageFilterGroupId.value = created?.group_id || ''
+    ElMessage.success('分组已创建')
   } catch (error) {
     if (error !== 'cancel') console.error(error)
   }
