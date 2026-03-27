@@ -107,3 +107,24 @@ description: 构建并路由 A 股可视化任务到 `utils/visualizers` 与 `ut
 # # 资源文件
 
 - `assets/visualization-request-template.md`：可复用的请求模板
+
+<!-- 脚本扩展 -->
+# # 脚本扩展（新增图表能力）
+
+新增图表函数请放在：
+
+- `scripts/chart_*.py`
+- 每个脚本通过 `CHART_SPECS` 暴露图表函数（推荐）或使用 `plot_*` 函数自动注册
+
+运行时入口：
+
+- `scripts/visualization_gateway.py`
+- `utils/visualizer_manager.py`
+  - `VisualizerManager.list_skill_charts()`
+  - `VisualizerManager.render_skill_chart(chart_id, **kwargs)`
+
+建议约定：
+
+- 图表函数返回 `embedded_html`（字符串）或 `echarts_option`（dict）
+- 函数参数使用显式命名，避免隐式全局状态
+- 对空数据/缺字段返回清晰错误信息

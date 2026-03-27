@@ -4,7 +4,9 @@
 <!-- 优先直接使用可视化器 -->
 # # 优先直接使用可视化器
 
-可视化管理器已移除，请直接调用 `utils/visualizers/` 下的方法。
+常规图表优先调用 `utils/visualizers/` 下的方法。
+若需要新增图表类型，可在 `skills/visualization/scripts/chart_*.py` 增加函数，
+并通过 `VisualizerManager.render_skill_chart` 进行动态调用。
 
 | 领域 | 主要可视化方法 |
 |---|---|

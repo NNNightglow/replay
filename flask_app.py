@@ -414,7 +414,8 @@ def manual_data_update(target):
             else:
                 message = '板块数据更新失败'
         elif normalized_target == 'indices':
-            update_success = data_fetcher.index_metadata_manager.update_metadata()
+            # 手动“设置 -> 指数更新”才执行缺口补齐
+            update_success = data_fetcher.index_metadata_manager.update_metadata(fill_gaps=True)
             if update_success:
                 index_data = data_fetcher.index_metadata_manager.load_metadata()
                 message = '指数数据更新成功'
@@ -2547,14 +2548,27 @@ def get_indices_kline():
             # 返回图表格式
             if len(indices) == 1:
                 # 单个指数图表
-                chart_html = IndexVisualizer.plot_index_kline(
-                    data_fetcher.index_metadata_manager.get_index_data(indices[0]),
-                    title=indices[0]
+                single_index_name = indices[0]
+                single_index_data = data_fetcher.index_metadata_manager.get_index_data(
+                    single_index_name,
+                    start_date=None,
+                    end_date=None
                 )
-                result[indices[0]] = {
-                    'success': True,
-                    'chart_html': chart_html
-                }
+                if single_index_data is None or single_index_data.is_empty():
+                    result[single_index_name] = {
+                        'success': False,
+                        'error': f'未找到指数 {single_index_name} 的数据',
+                        'chart_html': f"<div style='text-align:center; padding:50px; color:#666;'>未找到指数 {single_index_name} 的数据</div>"
+                    }
+                else:
+                    chart_html = IndexVisualizer.plot_index_kline(
+                        single_index_data,
+                        title=single_index_name
+                    )
+                    result[single_index_name] = {
+                        'success': True,
+                        'chart_html': chart_html
+                    }
             else:
                 # 多个指数图表
                 chart_result = MarketAnalyzer.get_multi_index_kline_data(

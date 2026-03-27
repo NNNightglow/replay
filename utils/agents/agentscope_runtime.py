@@ -2,158 +2,243 @@
 # -*- coding: utf-8 -*-
 
 import os
+import asyncio
 import inspect
+import importlib.util
 import json
+import re
+import time
+import threading
+import contextvars
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from types import ModuleType
+from typing import Any, Dict, List, Tuple, Callable, Optional
 
 import requests
 
+import agentscope  # type: ignore
+from agentscope.message import Msg  # type: ignore
+from agentscope.agent import ReActAgent  # type: ignore
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
+DATA_CACHE_GATEWAY_PATH = BASE_DIR / "skills" / "data-cache-inspector" / "scripts" / "data_cache_gateway.py"
 _AGENTSCOPE_READY = False
+_RUNTIME_EVENT_HOOK_LOCK = threading.Lock()
+_RUNTIME_EVENT_HOOK: Optional[Callable[[Dict[str, Any]], None]] = None
+_TRACE_CONTEXT: contextvars.ContextVar = contextvars.ContextVar("agent_trace_context", default={})
+_DATA_CACHE_GATEWAY_MODULE: Optional[ModuleType] = None
+_DATA_CACHE_GATEWAY_LOCK = threading.Lock()
 
-try:
-    import agentscope  # type: ignore
-    from agentscope.message import Msg  # type: ignore
-    from agentscope.agents import ReActAgent  # type: ignore
-
-    _AGENTSCOPE_AGENT_CLASS = ReActAgent
-    _AGENTSCOPE_AVAILABLE = True
-except Exception:
-    agentscope = None
-    Msg = None
-    ReActAgent = None
-    _AGENTSCOPE_AGENT_CLASS = None
-    _AGENTSCOPE_AVAILABLE = False
+AGENT_RESOURCE_DIR = Path(__file__).resolve().parent / "resource"
+AGENT_PROMPT_ALT_SUFFIX = "_prompt.md"
 
 
+def _load_data_cache_gateway_module() -> ModuleType:
+    global _DATA_CACHE_GATEWAY_MODULE
+    with _DATA_CACHE_GATEWAY_LOCK:
+        if _DATA_CACHE_GATEWAY_MODULE is not None:
+            return _DATA_CACHE_GATEWAY_MODULE
+        if not DATA_CACHE_GATEWAY_PATH.exists():
+            raise FileNotFoundError(f"Gateway module not found: {DATA_CACHE_GATEWAY_PATH}")
+        spec = importlib.util.spec_from_file_location("data_cache_gateway", DATA_CACHE_GATEWAY_PATH)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Failed to load module spec from: {DATA_CACHE_GATEWAY_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _DATA_CACHE_GATEWAY_MODULE = module
+        return module
 
-AGENT_PROFILES: Dict[str, Dict[str, Any]] = {
-    # Stage 1: 总控规划（入口）
-    "planner_agent": {
-        "display_name": "Planner Agent",
-        "description": "策略规划与任务拆解，可在无上传文件时直接对话。",
-        "sys_prompt": (
-            "你是A股策略规划助手。先澄清目标，再给出可执行步骤、关键风险和检查点。"
-        ),
-        "stage": 1,
-        "upstream_agents": [],
-        "downstream_agents": ["plan_task_agent"],
-        "skill_ids": ["goal_clarification", "risk_checkpointing"],
-    },
-    # Stage 2: 任务编排
-    "plan_task_agent": {
-        "display_name": "Plan & Task Agent",
-        "description": "把目标拆解为分层任务清单与执行顺序。",
-        "sys_prompt": (
-            "你是任务编排助手。把用户目标拆成按优先级排序的任务，输出里程碑、依赖、产出物。"
-        ),
-        "stage": 2,
-        "upstream_agents": ["planner_agent"],
-        "downstream_agents": ["crawler_agent", "data_processing_agent"],
-        "skill_ids": ["task_decomposition", "dependency_planning"],
-    },
-    # Stage 3: 数据获取
-    "crawler_agent": {
-        "display_name": "Crawler Agent",
-        "description": "爬取微信公众号文章并保存，再做内容总结。",
-        "sys_prompt": (
-            "你是爬虫助手。识别并处理微信公众号文章链接，输出抓取结果、失败原因和后续建议。"
-        ),
-        "stage": 3,
-        "upstream_agents": ["plan_task_agent"],
-        "downstream_agents": ["data_processing_agent"],
-        "skill_ids": ["wechat_article_crawl", "crawl_failure_diagnosis"],
-    },
-    # Stage 4: 数据处理
-    "data_processing_agent": {
-        "display_name": "Data Processing Agent",
-        "description": "数据清洗、特征构造、统计分析建议。",
-        "sys_prompt": (
-            "你是数据处理助手。聚焦数据口径、清洗规则、缺失值策略、特征与验证步骤。"
-        ),
-        "stage": 4,
-        "upstream_agents": ["plan_task_agent", "crawler_agent"],
-        "downstream_agents": ["visualization_agent"],
-        "skill_ids": ["data_cleaning", "feature_engineering", "stat_validation", "data-cache-inspector"],
-    },
-    # Stage 5: 结果表达
-    "visualization_agent": {
-        "display_name": "Visualization Agent",
-        "description": "图表与看板设计，解释可视化编码选择。",
-        "sys_prompt": (
-            "你是可视化助手。为金融场景设计图表方案，说明图表类型、字段映射、交互和误读风险。"
-        ),
-        "stage": 5,
-        "upstream_agents": ["data_processing_agent"],
-        "downstream_agents": [],
-        "skill_ids": ["chart_design", "dashboard_layout", "visual_risk_review", "visualization"],
-    },
+
+def query_data_cache_table_via_skill(**kwargs) -> Dict[str, Any]:
+    module = _load_data_cache_gateway_module()
+    return module.query_data_cache_table(**kwargs)
+
+
+def compare_market_turnover_dates_via_skill(date_a: str, date_b: str) -> Dict[str, Any]:
+    module = _load_data_cache_gateway_module()
+    return module.compare_market_turnover_dates(date_a=date_a, date_b=date_b)
+
+DEFAULT_AGENT_PROMPTS: Dict[str, str] = {
+    "dialog_agent": (
+        "你是A股复盘系统中的通用对话助手。优先进行自然、清晰、直接的问答沟通，"
+        "不做多角色流程编排。需要查看数据可用 data-cache-inspector，先说明你基于哪些数据得出结论。"
+    ),
+    "pm_agent": (
+        "你是产品经理（PM）。先理解用户真实需求，再定义范围、输入输出、验收标准与优先级。"
+        "若需求含糊，先提澄清问题；若信息足够，输出结构化需求说明。"
+    ),
+    "architect_agent": (
+        "你是架构师（Architect）。基于 PM 需求输出 TODO List，包含任务分层、依赖关系、执行顺序、"
+        "里程碑、风险点和回滚方案。优先给出最小可交付路径（MVP）。"
+    ),
+    "engineer_agent": (
+        "你是工程师（Engineer）。负责调用现有能力、编写新 skill/功能并落地实现。"
+        "输出时说明：复用了哪些能力、需要新增哪些能力、实现步骤、接口与验证方式。"
+    ),
+    "analyst_agent": (
+        "你是分析师（Analyst）。优先使用 data-cache-inspector 盘点已有数据、图表与可用证据，"
+        "再输出结构化分析：事实、信号、推断、风险与置信度。"
+    ),
+    "visualization_master_agent": (
+        "你是可视化大师。负责将分析结论转成图表与看板方案。明确图表类型、字段映射、配色和交互，"
+        "并指出潜在误读风险与展示限制。"
+    ),
 }
 
-AGENT_ROOT = "planner_agent"
+
+def _load_split_agent_prompts() -> Dict[str, str]:
+    def _resolve_agent_name(raw_key: str) -> str:
+        key = (raw_key or "").strip().lower()
+        if not key:
+            return ""
+
+        alias_map = {
+            "dialog": "dialog_agent",
+            "strategy_coordinator": "architect_agent",
+            "pm": "pm_agent",
+            "architect": "architect_agent",
+            "engineer": "engineer_agent",
+            "analyst": "analyst_agent",
+            "visualization": "visualization_master_agent",
+            "visualization_master": "visualization_master_agent",
+        }
+        if key in alias_map:
+            return alias_map[key]
+
+        if key in DEFAULT_AGENT_PROMPTS:
+            return key
+        if key.endswith("_prompt"):
+            key = key[: -len("_prompt")].strip()
+        if key in DEFAULT_AGENT_PROMPTS:
+            return key
+        if key.endswith("_agent"):
+            if key in DEFAULT_AGENT_PROMPTS:
+                return key
+            base = key[: -len("_agent")].strip()
+            return alias_map.get(base, key)
+        if f"{key}_agent" in DEFAULT_AGENT_PROMPTS:
+            return f"{key}_agent"
+        return alias_map.get(key, key)
+
+    out: Dict[str, str] = {}
+    if not AGENT_RESOURCE_DIR.exists():
+        return out
+    for path in AGENT_RESOURCE_DIR.glob(f"*{AGENT_PROMPT_ALT_SUFFIX}"):
+        filename = path.name
+        if not filename.endswith(AGENT_PROMPT_ALT_SUFFIX):
+            continue
+        raw_key = filename[: -len(AGENT_PROMPT_ALT_SUFFIX)].strip()
+        if not raw_key:
+            continue
+        agent_name = _resolve_agent_name(raw_key)
+        if not agent_name:
+            continue
+        try:
+            content = path.read_text(encoding="utf-8-sig").strip()
+        except Exception:
+            continue
+        if content:
+            out[agent_name] = content
+    return out
+
+
+def _load_agent_prompts() -> Dict[str, str]:
+    prompts = dict(DEFAULT_AGENT_PROMPTS)
+    prompts.update(_load_split_agent_prompts())
+    return prompts
+
+
+def _inject_sys_prompts(agent_profiles: Dict[str, Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    prompt_map = _load_agent_prompts()
+    result: Dict[str, Dict[str, Any]] = {}
+    for agent_name, profile in agent_profiles.items():
+        cloned = dict(profile)
+        cloned["sys_prompt"] = prompt_map.get(agent_name) or DEFAULT_AGENT_PROMPTS.get(agent_name, "")
+        result[agent_name] = cloned
+    return result
+
+
+AGENT_PROFILES: Dict[str, Dict[str, Any]] = _inject_sys_prompts(
+    {
+        # Stage 0: 对话入口（非编排）
+        "dialog_agent": {
+            "display_name": "Dialog Agent",
+            "description": "通用对话助手，支持调用 data-cache-inspector 查看数据。",
+            "stage": 0,
+            "upstream_agents": [],
+            "downstream_agents": [],
+            "skill_ids": ["data-cache-inspector"],
+        },
+        # Stage 1: 需求澄清
+        "pm_agent": {
+            "display_name": "PM Agent",
+            "description": "产品经理，负责理解用户需求并定义验收标准。",
+            "stage": 1,
+            "upstream_agents": ["architect_agent"],
+            "downstream_agents": [],
+            "skill_ids": [],
+        },
+        # Stage 2: 架构拆解
+        "architect_agent": {
+            "display_name": "Architect Agent",
+            "description": "架构师，负责输出 TODO List、任务依赖与落地路径。",
+            "stage": 0,
+            "upstream_agents": [],
+            "downstream_agents": ["pm_agent", "engineer_agent", "analyst_agent", "visualization_master_agent"],
+            "skill_ids": ["orchestration"],
+        },
+        # Stage 3: 工程实现
+        "engineer_agent": {
+            "display_name": "Engineer Agent",
+            "description": "工程师，负责调用/编写 skill 或功能并交付实现结果。",
+            "stage": 3,
+            "upstream_agents": ["architect_agent"],
+            "downstream_agents": [],
+            "skill_ids": [],
+        },
+        # Stage 4: 数据分析
+        "analyst_agent": {
+            "display_name": "Analyst Agent",
+            "description": "分析师，基于 data-cache-inspector 与现有数据产出策略分析。",
+            "stage": 4,
+            "upstream_agents": ["architect_agent"],
+            "downstream_agents": [],
+            "skill_ids": ["data-cache-inspector"],
+        },
+        # Stage 5: 可视化表达
+        "visualization_master_agent": {
+            "display_name": "Visualization Master",
+            "description": "可视化大师，负责绘图与图表叙事表达。",
+            "stage": 5,
+            "upstream_agents": ["architect_agent"],
+            "downstream_agents": [],
+            "skill_ids": ["visualization"],
+        },
+    }
+)
+
+AGENT_ROOT = "architect_agent"
 AGENT_PROFILE_FALLBACK = AGENT_ROOT
 
 SKILL_REGISTRY: Dict[str, Dict[str, str]] = {
-    "goal_clarification": {
-        "display_name": "Goal Clarification",
-        "description": "澄清目标、边界条件与验收标准。",
-    },
-    "risk_checkpointing": {
-        "display_name": "Risk Checkpointing",
-        "description": "识别关键风险并设置检查点。",
-    },
-    "task_decomposition": {
-        "display_name": "Task Decomposition",
-        "description": "把目标拆解为可执行任务。",
-    },
-    "dependency_planning": {
-        "display_name": "Dependency Planning",
-        "description": "梳理任务依赖与执行顺序。",
-    },
-    "wechat_article_crawl": {
-        "display_name": "WeChat Article Crawl",
-        "description": "提取并抓取微信公众号文章内容。",
-    },
-    "crawl_failure_diagnosis": {
-        "display_name": "Crawl Failure Diagnosis",
-        "description": "分析抓取失败原因并给出修复建议。",
-    },
-    "data_cleaning": {
-        "display_name": "Data Cleaning",
-        "description": "口径统一、异常值与缺失值处理。",
-    },
-    "feature_engineering": {
-        "display_name": "Feature Engineering",
-        "description": "构建特征并评估稳定性。",
-    },
-    "stat_validation": {
-        "display_name": "Stat Validation",
-        "description": "统计检验、样本偏差与结果验证。",
-    },
-    "chart_design": {
-        "display_name": "Chart Design",
-        "description": "选择图表类型并定义字段映射。",
-    },
-    "dashboard_layout": {
-        "display_name": "Dashboard Layout",
-        "description": "构建多图联动与看板布局。",
-    },
-    "visual_risk_review": {
-        "display_name": "Visual Risk Review",
-        "description": "识别可视化误读风险并补充说明。",
-    },
-    "visualization": {
-        "display_name": "Visualization",
-        "description": "A-share visualization routing and data contract checks for stock/index/sector/market charts.",
+    "orchestration": {
+        "display_name": "Orchestration",
+        "description": "跨角色协同编排与任务拆解，输出可执行计划与阶段交接。",
     },
     "data-cache-inspector": {
         "display_name": "Data Cache Inspector",
         "description": "Inspect cached market data in data_cache (stocks, indices, sectors, metadata) and summarize what is available.",
     },
+    "visualization": {
+        "display_name": "Visualization",
+        "description": "A-share visualization routing and data contract checks for stock/index/sector/market charts.",
+    },
+    "multiformat-to-md": {
+        "display_name": "Multiformat To Markdown",
+        "description": "Convert pdf/docx/images/audio/video and web pages into markdown for downstream analysis.",
+    },
 }
-
 
 def _assert_agent_graph_valid() -> None:
     known_agents = set(AGENT_PROFILES.keys())
@@ -277,9 +362,656 @@ def _compose_context_blocks(resource_context: str, extra_context: str) -> List[s
     return blocks
 
 
-def _env_flag(name: str, default: str = "0") -> bool:
-    raw = (os.getenv(name) or default).strip().lower()
-    return raw in {"1", "true", "yes", "on"}
+def set_runtime_event_hook(hook: Optional[Callable[[Dict[str, Any]], None]]) -> None:
+    global _RUNTIME_EVENT_HOOK
+    with _RUNTIME_EVENT_HOOK_LOCK:
+        _RUNTIME_EVENT_HOOK = hook
+
+
+def _emit_runtime_event(event_type: str, **fields) -> None:
+    with _RUNTIME_EVENT_HOOK_LOCK:
+        hook = _RUNTIME_EVENT_HOOK
+    if not callable(hook):
+        return
+
+    event: Dict[str, Any] = {
+        "event_type": str(event_type or "").strip() or "runtime_event",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    context = _TRACE_CONTEXT.get() or {}
+    if isinstance(context, dict) and context:
+        event.update(context)
+    if fields:
+        event.update(fields)
+
+    try:
+        hook(event)
+    except Exception:
+        pass
+
+
+def _scan_data_cache_snapshot(max_files: int = 4000) -> str:
+    data_cache_root = BASE_DIR / "data_cache"
+    targets: List[Tuple[str, Path, bool]] = [
+        ("data_cache_root", data_cache_root, False),
+        ("indices", data_cache_root / "indices", False),
+        ("stock_daily", data_cache_root / "stock_daily", False),
+        ("stock_minute", data_cache_root / "stock_minute", False),
+        ("other", data_cache_root / "other", False),
+        ("strategy_watch", data_cache_root / "strategy_watch", True),
+    ]
+
+    def _scan_one(path: Path, recursive: bool) -> Dict[str, Any]:
+        out: Dict[str, Any] = {
+            "exists": path.exists() and path.is_dir(),
+            "file_count": 0,
+            "size_bytes": 0,
+            "latest_mtime_iso": "",
+            "latest_inferred_date": "",
+            "truncated": False,
+        }
+        if not out["exists"]:
+            return out
+
+        latest_mtime = 0.0
+        latest_date = ""
+        inspected = 0
+        iterator = path.rglob("*") if recursive else path.glob("*")
+        for item in iterator:
+            if not item.is_file():
+                continue
+            inspected += 1
+            if inspected > max_files:
+                out["truncated"] = True
+                break
+            out["file_count"] += 1
+            try:
+                st = item.stat()
+                out["size_bytes"] += int(st.st_size)
+                if st.st_mtime > latest_mtime:
+                    latest_mtime = st.st_mtime
+            except Exception:
+                pass
+
+            name = item.name
+            for pattern in (
+                r"(?<!\d)(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?(?!\d)",
+                r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)",
+            ):
+                hit = re.search(pattern, name)
+                if not hit:
+                    continue
+                try:
+                    y, m, d = int(hit.group(1)), int(hit.group(2)), int(hit.group(3))
+                    date_str = f"{y:04d}-{m:02d}-{d:02d}"
+                    if date_str > latest_date:
+                        latest_date = date_str
+                except Exception:
+                    pass
+                break
+
+        if latest_mtime > 0:
+            out["latest_mtime_iso"] = datetime.fromtimestamp(latest_mtime, tz=timezone.utc).isoformat()
+        out["latest_inferred_date"] = latest_date
+        return out
+
+    snapshots = [(name, _scan_one(path, recursive)) for name, path, recursive in targets]
+    latest_dates = []
+    for _, snap in snapshots:
+        inferred = str(snap.get("latest_inferred_date") or "").strip()
+        if inferred:
+            latest_dates.append(inferred)
+    latest_date = max(latest_dates) if latest_dates else ""
+
+    lines = [
+        "Data cache inspector snapshot:",
+        f"- cache_root: {data_cache_root.as_posix()}",
+        f"- latest_inferred_data_date: {latest_date or 'unknown'}",
+    ]
+    for name, snap in snapshots:
+        if not snap.get("exists"):
+            lines.append(f"- {name}: missing")
+            continue
+        lines.append(
+            "- {name}: files={files}, size_bytes={size}, latest_mtime={mtime}, inferred_date={idata}{tail}".format(
+                name=name,
+                files=snap.get("file_count", 0),
+                size=snap.get("size_bytes", 0),
+                mtime=snap.get("latest_mtime_iso") or "unknown",
+                idata=snap.get("latest_inferred_date") or "unknown",
+                tail=", truncated=true" if snap.get("truncated") else "",
+            )
+        )
+    lines.extend(["", *_build_data_cache_schema_lines()])
+    return "\n".join(lines)
+
+
+def _detect_date_column(schema_items: List[Tuple[str, Any]]) -> str:
+    if not schema_items:
+        return ""
+
+    preferred_names = (
+        "日期",
+        "date",
+        "trade_date",
+        "时间",
+        "datetime",
+        "timestamp",
+    )
+    lowered_map = {str(name).strip().lower(): str(name) for name, _ in schema_items}
+    for key in preferred_names:
+        hit = lowered_map.get(key.lower())
+        if hit:
+            return hit
+
+    for name, dtype in schema_items:
+        dt = str(dtype or "")
+        if "Date" in dt or "Datetime" in dt:
+            return str(name)
+    return ""
+
+
+def _schema_preview_for_parquet(path: Path, max_columns: int = 18) -> Dict[str, Any]:
+    out: Dict[str, Any] = {
+        "exists": path.exists() and path.is_file(),
+        "col_count": 0,
+        "schema_preview": [],
+        "date_col": "",
+        "date_min": "",
+        "date_max": "",
+        "error": "",
+    }
+    if not out["exists"]:
+        return out
+
+    try:
+        import polars as pl  # type: ignore
+
+        lf = pl.scan_parquet(str(path))
+        schema = dict(getattr(lf, "schema", {}) or {})
+        schema_items = list(schema.items())
+        out["col_count"] = len(schema_items)
+        preview_items = schema_items[:max_columns]
+        out["schema_preview"] = [f"{name}:{dtype}" for name, dtype in preview_items]
+        if len(schema_items) > max_columns:
+            out["schema_preview"].append(f"...(+{len(schema_items) - max_columns} cols)")
+
+        date_col = _detect_date_column(schema_items)
+        out["date_col"] = date_col
+        if date_col:
+            try:
+                date_range = (
+                    lf.select(
+                        pl.col(date_col).min().alias("__min_date__"),
+                        pl.col(date_col).max().alias("__max_date__"),
+                    )
+                    .collect()
+                    .to_dicts()
+                )
+                if date_range:
+                    row = date_range[0] or {}
+                    if row.get("__min_date__") is not None:
+                        out["date_min"] = str(row.get("__min_date__"))
+                    if row.get("__max_date__") is not None:
+                        out["date_max"] = str(row.get("__max_date__"))
+            except Exception:
+                pass
+    except Exception as exc:
+        out["error"] = str(exc)
+
+    return out
+
+
+def _build_data_cache_schema_lines() -> List[str]:
+    root = BASE_DIR / "data_cache"
+    targets: List[str] = [
+        "indices/index_daily_metadata.parquet",
+        "indices/index_minute_metadata.parquet",
+        "stock_daily/stock_daily_metadata.parquet",
+        "other/market_metadata.parquet",
+        "other/market_states.parquet",
+        "sectors/sectors_ths.parquet",
+        "sectors/sectors_dc.parquet",
+    ]
+    lines = ["Core metadata schemas (column:dtype preview):"]
+    for rel in targets:
+        path = root / rel
+        summary = _schema_preview_for_parquet(path)
+        if not summary.get("exists"):
+            lines.append(f"- {rel}: missing")
+            continue
+        if summary.get("error"):
+            lines.append(f"- {rel}: read_error={summary.get('error')}")
+            continue
+
+        details: List[str] = [f"cols={summary.get('col_count', 0)}"]
+        date_col = str(summary.get("date_col") or "").strip()
+        date_min = str(summary.get("date_min") or "").strip()
+        date_max = str(summary.get("date_max") or "").strip()
+        if date_col:
+            details.append(f"date_col={date_col}")
+        if date_min or date_max:
+            details.append(f"date_range={date_min or 'unknown'} -> {date_max or 'unknown'}")
+        schema_preview = ", ".join(summary.get("schema_preview") or [])
+        lines.append(f"- {rel}: {'; '.join(details)}; schema={schema_preview or 'unknown'}")
+    return lines
+
+
+_DATA_CACHE_TABLE_PATHS: Dict[str, str] = {
+    "index_daily_metadata": "indices/index_daily_metadata.parquet",
+    "index_minute_metadata": "indices/index_minute_metadata.parquet",
+    "stock_daily_metadata": "stock_daily/stock_daily_metadata.parquet",
+    "market_metadata": "other/market_metadata.parquet",
+    "market_states": "other/market_states.parquet",
+    "sectors_ths": "sectors/sectors_ths.parquet",
+    "sectors_dc": "sectors/sectors_dc.parquet",
+}
+
+
+_DATA_CACHE_TABLE_ALIASES: Dict[str, str] = {
+    "index_daily": "index_daily_metadata",
+    "index_minute": "index_minute_metadata",
+    "stock_daily": "stock_daily_metadata",
+    "market": "market_metadata",
+    "market_meta": "market_metadata",
+    "market_state": "market_states",
+    "sector_ths": "sectors_ths",
+    "sector_dc": "sectors_dc",
+}
+
+
+def _normalize_date_ymd(value: Any) -> str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    hit = re.search(r"(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})", text)
+    if hit:
+        y, m, d = int(hit.group(1)), int(hit.group(2)), int(hit.group(3))
+        return f"{y:04d}-{m:02d}-{d:02d}"
+    hit = re.search(r"(20\d{2})(\d{2})(\d{2})", text)
+    if hit:
+        y, m, d = int(hit.group(1)), int(hit.group(2)), int(hit.group(3))
+        return f"{y:04d}-{m:02d}-{d:02d}"
+    return ""
+
+
+def _resolve_data_cache_table(table: str) -> Tuple[str, Path]:
+    raw = str(table or "").strip().lower().replace("\\", "/")
+    table_key = _DATA_CACHE_TABLE_ALIASES.get(raw, raw)
+    if table_key not in _DATA_CACHE_TABLE_PATHS:
+        for key, rel in _DATA_CACHE_TABLE_PATHS.items():
+            rel_norm = rel.lower().replace("\\", "/")
+            rel_no_ext = rel_norm[:-8] if rel_norm.endswith(".parquet") else rel_norm
+            if raw in {rel_norm, rel_no_ext, key.lower()}:
+                table_key = key
+                break
+    if table_key not in _DATA_CACHE_TABLE_PATHS:
+        raise ValueError(
+            "Unknown table. Available: "
+            + ", ".join(sorted(_DATA_CACHE_TABLE_PATHS.keys()))
+        )
+    rel = _DATA_CACHE_TABLE_PATHS[table_key]
+    return table_key, (BASE_DIR / "data_cache" / rel)
+
+
+def _parse_columns_arg(columns: str, available_columns: List[str]) -> Tuple[List[str], List[str]]:
+    if not columns:
+        return [], []
+    requested = [item.strip() for item in str(columns).split(",") if item.strip()]
+    if not requested:
+        return [], []
+    available_set = set(available_columns)
+    valid = [item for item in requested if item in available_set]
+    invalid = [item for item in requested if item not in available_set]
+    return valid, invalid
+
+
+def _as_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    text = str(value).strip().replace(",", "")
+    if not text:
+        return None
+    try:
+        return float(text)
+    except Exception:
+        return None
+
+
+def _query_data_cache_table(
+    table: str,
+    date: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    columns: str = "",
+    filter_column: str = "",
+    filter_value: str = "",
+    sort_desc: bool = True,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    try:
+        import polars as pl  # type: ignore
+    except Exception as exc:
+        return {"ok": False, "error": f"polars unavailable: {exc}"}
+
+    try:
+        table_key, table_path = _resolve_data_cache_table(table)
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+    if not table_path.exists() or not table_path.is_file():
+        return {"ok": False, "error": f"table file not found: {table_path.as_posix()}"}
+
+    safe_limit = max(1, min(int(limit or 20), 200))
+    try:
+        lf = pl.scan_parquet(str(table_path))
+        schema = dict(getattr(lf, "schema", {}) or {})
+    except Exception as exc:
+        return {"ok": False, "error": f"failed to scan parquet: {exc}"}
+
+    available_columns = list(schema.keys())
+    schema_items = list(schema.items())
+    date_col = _detect_date_column(schema_items)
+
+    valid_columns, invalid_columns = _parse_columns_arg(columns, available_columns)
+    selected_columns = valid_columns if valid_columns else available_columns[: min(18, len(available_columns))]
+
+    working = lf
+    date_norm = _normalize_date_ymd(date)
+    date_from_norm = _normalize_date_ymd(date_from)
+    date_to_norm = _normalize_date_ymd(date_to)
+    if date_col:
+        working = working.with_columns(pl.col(date_col).cast(pl.Utf8).str.slice(0, 10).alias("__date_key__"))
+        if date_norm:
+            working = working.filter(pl.col("__date_key__") == date_norm)
+        if date_from_norm:
+            working = working.filter(pl.col("__date_key__") >= date_from_norm)
+        if date_to_norm:
+            working = working.filter(pl.col("__date_key__") <= date_to_norm)
+
+    fcol = str(filter_column or "").strip()
+    if fcol:
+        if fcol not in schema:
+            return {
+                "ok": False,
+                "error": f"filter_column not found: {fcol}",
+                "available_columns": available_columns,
+            }
+        filter_values = [x.strip() for x in re.split(r"[,，]", str(filter_value or "")) if x.strip()]
+        if len(filter_values) > 1:
+            working = working.filter(pl.col(fcol).cast(pl.Utf8).is_in(filter_values))
+        else:
+            working = working.filter(pl.col(fcol).cast(pl.Utf8) == str(filter_value or ""))
+
+    if date_col:
+        working = working.sort("__date_key__", descending=bool(sort_desc))
+
+    try:
+        rows_df = working.select([pl.col(col) for col in selected_columns]).head(safe_limit).collect()
+        rows = rows_df.to_dicts()
+    except Exception as exc:
+        return {"ok": False, "error": f"failed to collect rows: {exc}"}
+
+    return {
+        "ok": True,
+        "table": table_key,
+        "path": table_path.relative_to(BASE_DIR).as_posix(),
+        "date_col": date_col,
+        "query": {
+            "date": date_norm,
+            "date_from": date_from_norm,
+            "date_to": date_to_norm,
+            "filter_column": fcol,
+            "filter_value": str(filter_value or ""),
+            "sort_desc": bool(sort_desc),
+            "limit": safe_limit,
+        },
+        "available_columns": available_columns,
+        "selected_columns": selected_columns,
+        "invalid_columns": invalid_columns,
+        "returned_rows": len(rows),
+        "rows": rows,
+    }
+
+
+def _tool_data_cache_query_table(
+    table: str,
+    date: str = "",
+    date_from: str = "",
+    date_to: str = "",
+    columns: str = "",
+    filter_column: str = "",
+    filter_value: str = "",
+    sort_desc: bool = True,
+    limit: int = 20,
+) -> Any:
+    start_perf = time.perf_counter()
+    _emit_runtime_event(
+        "agent_tool_start",
+        tool_name="data_cache_query_table",
+        table=str(table or ""),
+        date=str(date or ""),
+        date_from=str(date_from or ""),
+        date_to=str(date_to or ""),
+        filter_column=str(filter_column or ""),
+        limit=int(limit or 20),
+    )
+    result = query_data_cache_table_via_skill(
+        table=table,
+        date=date,
+        date_from=date_from,
+        date_to=date_to,
+        columns=columns,
+        filter_column=filter_column,
+        filter_value=filter_value,
+        sort_desc=sort_desc,
+        limit=limit,
+    )
+    text = json.dumps(result, ensure_ascii=False, default=str)
+    _emit_runtime_event(
+        "agent_tool_done",
+        tool_name="data_cache_query_table",
+        duration_ms=int((time.perf_counter() - start_perf) * 1000),
+        output_chars=len(text or ""),
+        ok=bool(result.get("ok")),
+    )
+    try:
+        from agentscope.tool import ToolResponse  # type: ignore
+
+        return ToolResponse(content=text)
+    except Exception:
+        return text
+
+
+def _tool_compare_market_turnover_dates(date_a: str, date_b: str) -> Any:
+    start_perf = time.perf_counter()
+    _emit_runtime_event(
+        "agent_tool_start",
+        tool_name="compare_market_turnover_dates",
+        date_a=str(date_a or ""),
+        date_b=str(date_b or ""),
+    )
+    output = compare_market_turnover_dates_via_skill(
+        date_a=str(date_a or ""),
+        date_b=str(date_b or ""),
+    )
+
+    text = json.dumps(output, ensure_ascii=False, default=str)
+    _emit_runtime_event(
+        "agent_tool_done",
+        tool_name="compare_market_turnover_dates",
+        duration_ms=int((time.perf_counter() - start_perf) * 1000),
+        output_chars=len(text or ""),
+        ok=bool(output.get("ok")),
+    )
+    try:
+        from agentscope.tool import ToolResponse  # type: ignore
+
+        return ToolResponse(content=text)
+    except Exception:
+        return text
+
+
+def _tool_data_cache_inspector() -> Any:
+    start_ts = time.time()
+    start_perf = time.perf_counter()
+    _emit_runtime_event(
+        "agent_tool_start",
+        tool_name="data_cache_inspector",
+        started_at=datetime.fromtimestamp(start_ts, tz=timezone.utc).isoformat(),
+    )
+    text = _scan_data_cache_snapshot()
+    duration_ms = int((time.perf_counter() - start_perf) * 1000)
+    _emit_runtime_event(
+        "agent_tool_done",
+        tool_name="data_cache_inspector",
+        duration_ms=duration_ms,
+        output_chars=len(text or ""),
+    )
+    try:
+        from agentscope.tool import ToolResponse  # type: ignore
+
+        return ToolResponse(content=text)
+    except Exception:
+        return text
+
+
+def _tool_specs_for_agent(agent_name: str) -> List[Dict[str, Any]]:
+    profile = get_agent_profile(agent_name)
+    skill_ids = set(profile.get("skill_ids", []) or [])
+    tools: List[Dict[str, Any]] = []
+    if "data-cache-inspector" in skill_ids:
+        tools.append(
+            {
+                "name": "data_cache_inspector",
+                "func": _tool_data_cache_inspector,
+                "description": (
+                    "Inspect local data_cache status (stocks/indices/market metadata), "
+                    "return file count/size/latest date, plus schema previews with column names and dtypes."
+                ),
+            }
+        )
+        tools.append(
+            {
+                "name": "data_cache_query_table",
+                "func": _tool_data_cache_query_table,
+                "description": (
+                    "Read rows from a known data_cache parquet table with filters. "
+                    "Arguments: table, date/date_from/date_to, columns(comma-separated), "
+                    "filter_column/filter_value, sort_desc, limit."
+                ),
+            }
+        )
+        tools.append(
+            {
+                "name": "compare_market_turnover_dates",
+                "func": _tool_compare_market_turnover_dates,
+                "description": (
+                    "Compare market total turnover between two dates using "
+                    "data_cache/other/market_metadata.parquet field 成交总额."
+                ),
+            }
+        )
+    return tools
+
+
+def _build_agentscope_toolkit(agent_name: str):
+    tool_specs = _tool_specs_for_agent(agent_name)
+    if not tool_specs:
+        _emit_runtime_event("agent_tools_bound", agent_name=agent_name, tool_names=[])
+        return None
+
+    try:
+        from agentscope.tool import Toolkit  # type: ignore
+
+        toolkit = Toolkit()
+        for spec in tool_specs:
+            register = getattr(toolkit, "register_tool_function", None)
+            if callable(register):
+                try:
+                    register(
+                        spec["func"],
+                        func_name=spec["name"],
+                        func_description=spec["description"],
+                    )
+                except TypeError:
+                    try:
+                        register(spec["func"], spec["name"], spec["description"])
+                    except Exception:
+                        register(spec["func"])
+                continue
+            register = getattr(toolkit, "add_tool", None)
+            if callable(register):
+                register(spec["func"], name=spec["name"], description=spec["description"])
+                continue
+        _emit_runtime_event(
+            "agent_tools_bound",
+            agent_name=agent_name,
+            tool_names=[str(item.get("name") or "") for item in tool_specs],
+        )
+        return toolkit
+    except Exception as primary_error:
+        last_error = primary_error
+
+        try:
+            from agentscope.service import ServiceToolkit  # type: ignore
+
+            toolkit = ServiceToolkit()
+            for spec in tool_specs:
+                if hasattr(toolkit, "add"):
+                    toolkit.add(spec["func"])
+            return toolkit
+        except Exception:
+            raise RuntimeError(f"Failed to initialize tool toolkit: {last_error}")
+
+    return None
+
+
+def _build_agentscope_model(
+    model_name: str,
+    base_url: str,
+    api_key: str,
+    temperature: float,
+    stream: bool = False,
+):
+    try:
+        from agentscope.model import OpenAIChatModel  # type: ignore
+
+        return OpenAIChatModel(
+            model_name=model_name,
+            api_key=api_key,
+            stream=bool(stream),
+            client_kwargs={"base_url": base_url},
+            generate_kwargs={"temperature": max(0.0, min(float(temperature), 2.0))},
+        )
+    except Exception:
+        _ensure_agentscope_init(
+            model_name=model_name,
+            base_url=base_url,
+            api_key=api_key,
+            temperature=temperature,
+        )
+        return "stock_llm"
+
+
+def _build_agentscope_formatter():
+    try:
+        from agentscope.formatter import OpenAIChatFormatter  # type: ignore
+
+        return OpenAIChatFormatter()
+    except Exception:
+        return None
+
+
+def _build_agentscope_memory():
+    try:
+        from agentscope.memory import InMemoryMemory  # type: ignore
+
+        return InMemoryMemory()
+    except Exception:
+        return None
 
 
 def _env_int(name: str, default: int) -> int:
@@ -430,7 +1162,7 @@ def _build_openai_messages(
 
 def _ensure_agentscope_init(model_name: str, base_url: str, api_key: str, temperature: float) -> None:
     global _AGENTSCOPE_READY
-    if not _AGENTSCOPE_AVAILABLE or _AGENTSCOPE_READY:
+    if _AGENTSCOPE_READY:
         return
 
     agentscope.init(
@@ -450,11 +1182,15 @@ def _ensure_agentscope_init(model_name: str, base_url: str, api_key: str, temper
 
 
 
-def _build_agentscope_agent(agent_name: str, sys_prompt: str):
-    if _AGENTSCOPE_AGENT_CLASS is None:
-        raise RuntimeError("AgentScope ReActAgent is not available.")
-
-    cls = _AGENTSCOPE_AGENT_CLASS
+def _build_agentscope_agent(
+    agent_name: str,
+    sys_prompt: str,
+    model: Any,
+    formatter: Any,
+    toolkit: Any,
+    memory: Any,
+):
+    cls = ReActAgent
     signatures = inspect.signature(cls.__init__).parameters
 
     def _pick_kwargs(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -462,11 +1198,25 @@ def _build_agentscope_agent(agent_name: str, sys_prompt: str):
             return raw
         return {k: v for k, v in raw.items() if k in signatures}
 
+    base = {"name": agent_name, "sys_prompt": sys_prompt}
+    if model is not None:
+        base["model"] = model
+    if formatter is not None:
+        base["formatter"] = formatter
+    if memory is not None:
+        base["memory"] = memory
+
+    if toolkit is not None:
+        for key in ("toolkit", "service_toolkit", "tools", "tool_manager"):
+            base[key] = toolkit
+
     candidates = [
+        dict(base),
+        dict(base, system_prompt=sys_prompt),
+        dict(base, model_config_name=model if isinstance(model, str) else "stock_llm"),
         {"name": agent_name, "sys_prompt": sys_prompt, "model_config_name": "stock_llm"},
         {"name": agent_name, "system_prompt": sys_prompt, "model_config_name": "stock_llm"},
         {"name": agent_name, "model_config_name": "stock_llm"},
-        {"name": agent_name},
     ]
     last_error = None
     for item in candidates:
@@ -482,11 +1232,70 @@ def _build_agentscope_agent(agent_name: str, sys_prompt: str):
     raise RuntimeError(f"Failed to build agentscope agent for {agent_name}.")
 
 
+def _call_agentscope_agent(agent: Any, user_prompt: str) -> Any:
+    _emit_runtime_event("agent_invoke_start", prompt_chars=len(user_prompt or ""))
+    msg = Msg(
+        name="user",
+        role="user",
+        content=user_prompt,
+    )
+    try:
+        reply = agent(msg)
+    except TypeError:
+        reply = agent(user_prompt)
+
+    if inspect.isawaitable(reply):
+        try:
+            asyncio.get_running_loop()
+            raise RuntimeError("Async AgentScope call is not supported inside running event loop.")
+        except RuntimeError as exc:
+            if "no running event loop" in str(exc).lower():
+                reply = asyncio.run(reply)
+            else:
+                _emit_runtime_event("agent_invoke_error", error=str(exc))
+                raise
+    _emit_runtime_event("agent_invoke_done")
+    return reply
+
+
+def _normalize_reply_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, dict):
+        for key in ("text", "content", "message", "output_text"):
+            if key in value:
+                text = _normalize_reply_text(value.get(key))
+                if text:
+                    return text
+        try:
+            return json.dumps(value, ensure_ascii=False)
+        except Exception:
+            return str(value).strip()
+    if isinstance(value, (list, tuple)):
+        parts: List[str] = []
+        for item in value:
+            text = _normalize_reply_text(item)
+            if text:
+                parts.append(text)
+        return "\n".join(parts).strip()
+    nested_content = getattr(value, "content", None)
+    if nested_content is not None and nested_content is not value:
+        text = _normalize_reply_text(nested_content)
+        if text:
+            return text
+    return str(value).strip()
+
+
 def _extract_reply_content(reply: Any) -> str:
-    content = getattr(reply, "content", "")
-    if content:
-        return str(content).strip()
-    return str(reply).strip()
+    content = getattr(reply, "content", None)
+    if content is not None:
+        text = _normalize_reply_text(content)
+        if text:
+            return text
+    text = _normalize_reply_text(reply)
+    return text
 
 
 def _call_openai_compatible(
@@ -668,72 +1477,106 @@ def chat_with_agent(
     extra_context: str = "",
     model_name: str = "",
     temperature: float = 0.2,
+    trace_context: Optional[Dict[str, Any]] = None,
 ) -> Tuple[str, str, str, Dict[str, Any]]:
     _load_env_files()
+    strict_agentscope = (os.getenv("AGENTSCOPE_STRICT") or "1").strip() != "0"
+    trace_token = _TRACE_CONTEXT.set(dict(trace_context or {}))
 
-    api_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
+    try:
+        api_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
 
-    resolved_model = _normalize_model_name(model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
-    base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
-
-    sys_prompt = _get_agent_prompt(agent_name)
-    history_block = _build_history_block(history_messages)
-    composed_user = user_content
-    if history_block:
-        composed_user = (
-            "History summary:\n"
-            f"{history_block}\n\n"
-            "User question:\n"
-            f"{user_content}"
+        resolved_model = _normalize_model_name(model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
+        base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
+        _emit_runtime_event(
+            "agent_request_start",
+            agent_name=agent_name,
+            model=resolved_model,
+            stream=False,
+            prompt_chars=len(user_content or ""),
         )
-    context_blocks = _compose_context_blocks(resource_context, extra_context)
 
-    # 默认关闭 AgentScope 包装，优先保持上游请求前缀稳定，提升服务端缓存命中率。
-    if _AGENTSCOPE_AVAILABLE and _env_flag("AGENTSCOPE_ENABLED", "0"):
+        sys_prompt = _get_agent_prompt(agent_name)
+        history_block = _build_history_block(history_messages)
+        composed_user = user_content
+        if history_block:
+            composed_user = (
+                "History summary:\n"
+                f"{history_block}\n\n"
+                "User question:\n"
+                f"{user_content}"
+            )
+        context_blocks = _compose_context_blocks(resource_context, extra_context)
+
         try:
-            _ensure_agentscope_init(
+            model = _build_agentscope_model(
                 model_name=resolved_model,
                 base_url=base_url,
                 api_key=api_key,
                 temperature=temperature,
+                stream=False,
             )
-            agent = _build_agentscope_agent(agent_name=agent_name, sys_prompt=sys_prompt)
+            formatter = _build_agentscope_formatter()
+            memory = _build_agentscope_memory()
+            toolkit = _build_agentscope_toolkit(agent_name)
+            agent = _build_agentscope_agent(
+                agent_name=agent_name,
+                sys_prompt=sys_prompt,
+                model=model,
+                formatter=formatter,
+                toolkit=toolkit,
+                memory=memory,
+            )
             composed_user_for_agent = composed_user
             if context_blocks:
                 composed_user_for_agent = "\n\n".join(context_blocks) + "\n\nUser question:\n" + composed_user
-            try:
-                reply = agent(
-                    Msg(
-                        name="user",
-                        role="user",
-                        content=composed_user_for_agent,
-                    )
-                )
-            except TypeError:
-                reply = agent(composed_user_for_agent)
-
+            reply = _call_agentscope_agent(agent, composed_user_for_agent)
             content = _extract_reply_content(reply)
-            return content.strip(), resolved_model, "agentscope", {}
-        except Exception:
-            pass
+            _emit_runtime_event(
+                "agent_request_done",
+                agent_name=agent_name,
+                model=resolved_model,
+                provider="agentscope_react",
+                response_chars=len(content or ""),
+            )
+            return content.strip(), resolved_model, "agentscope_react", {}
+        except Exception as exc:
+            _emit_runtime_event(
+                "agent_request_error",
+                agent_name=agent_name,
+                model=resolved_model,
+                provider="agentscope_react",
+                error=str(exc),
+            )
+            if strict_agentscope:
+                raise
 
-    messages = _build_openai_messages(
-        sys_prompt=sys_prompt,
-        resource_context=resource_context,
-        extra_context=extra_context,
-        history_messages=history_messages,
-        user_content=user_content,
-    )
-    fallback_reply, usage = _call_openai_compatible(
-        messages=messages,
-        model_name=resolved_model,
-        base_url=base_url,
-        api_key=api_key,
-        temperature=temperature,
-    )
-    return fallback_reply, resolved_model, "openai_compatible_fallback", usage
+        messages = _build_openai_messages(
+            sys_prompt=sys_prompt,
+            resource_context=resource_context,
+            extra_context=extra_context,
+            history_messages=history_messages,
+            user_content=user_content,
+        )
+        fallback_reply, usage = _call_openai_compatible(
+            messages=messages,
+            model_name=resolved_model,
+            base_url=base_url,
+            api_key=api_key,
+            temperature=temperature,
+        )
+        _emit_runtime_event(
+            "agent_request_done",
+            agent_name=agent_name,
+            model=resolved_model,
+            provider="openai_compatible_fallback",
+            response_chars=len(fallback_reply or ""),
+        )
+        return fallback_reply, resolved_model, "openai_compatible_fallback", usage
+    finally:
+        _TRACE_CONTEXT.reset(trace_token)
 
 
 
@@ -751,29 +1594,21 @@ def chat_with_agent_stream(
     extra_context: str = "",
     model_name: str = "",
     temperature: float = 0.2,
+    trace_context: Optional[Dict[str, Any]] = None,
 ):
     _load_env_files()
+    strict_agentscope = (os.getenv("AGENTSCOPE_STRICT") or "1").strip() != "0"
+    trace_token = _TRACE_CONTEXT.set(dict(trace_context or {}))
 
-    api_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
+    try:
+        api_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
 
-    resolved_model = _normalize_model_name(model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
-    base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
+        resolved_model = _normalize_model_name(model_name or os.getenv("OPENAI_MODEL") or "gpt-4o-mini")
+        base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
+        sys_prompt = _get_agent_prompt(agent_name)
 
-    sys_prompt = _get_agent_prompt(agent_name)
-    history_block = _build_history_block(history_messages)
-    composed_user = user_content
-    if history_block:
-        composed_user = (
-            "History summary:\n"
-            f"{history_block}\n\n"
-            "User question:\n"
-            f"{user_content}"
-        )
-    context_blocks = _compose_context_blocks(resource_context, extra_context)
-
-    if _AGENTSCOPE_AVAILABLE and _env_flag("AGENTSCOPE_ENABLED", "0"):
         try:
             content, resolved_model, provider, _usage = chat_with_agent(
                 agent_name=agent_name,
@@ -783,6 +1618,7 @@ def chat_with_agent_stream(
                 extra_context=extra_context,
                 model_name=model_name,
                 temperature=temperature,
+                trace_context=trace_context,
             )
 
             def _single():
@@ -790,23 +1626,41 @@ def chat_with_agent_stream(
                     yield content
 
             return _single(), resolved_model, provider, {}
-        except Exception:
-            pass
+        except Exception as exc:
+            _emit_runtime_event(
+                "agent_stream_error",
+                agent_name=agent_name,
+                model=resolved_model,
+                provider="agentscope_react",
+                error=str(exc),
+            )
+            if strict_agentscope:
+                raise
 
-    messages = _build_openai_messages(
-        sys_prompt=sys_prompt,
-        resource_context=resource_context,
-        extra_context=extra_context,
-        history_messages=history_messages,
-        user_content=user_content,
-    )
-    usage_collector: Dict[str, Any] = {}
-    stream = _stream_openai_compatible(
-        messages=messages,
-        model_name=resolved_model,
-        base_url=base_url,
-        api_key=api_key,
-        temperature=temperature,
-        usage_collector=usage_collector,
-    )
-    return stream, resolved_model, "openai_compatible_stream", usage_collector
+        messages = _build_openai_messages(
+            sys_prompt=sys_prompt,
+            resource_context=resource_context,
+            extra_context=extra_context,
+            history_messages=history_messages,
+            user_content=user_content,
+        )
+        usage_collector: Dict[str, Any] = {}
+        _emit_runtime_event(
+            "agent_request_start",
+            agent_name=agent_name,
+            model=resolved_model,
+            provider="openai_compatible_stream",
+            stream=True,
+            prompt_chars=len(user_content or ""),
+        )
+        stream = _stream_openai_compatible(
+            messages=messages,
+            model_name=resolved_model,
+            base_url=base_url,
+            api_key=api_key,
+            temperature=temperature,
+            usage_collector=usage_collector,
+        )
+        return stream, resolved_model, "openai_compatible_stream", usage_collector
+    finally:
+        _TRACE_CONTEXT.reset(trace_token)

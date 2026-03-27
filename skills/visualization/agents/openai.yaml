@@ -2,5 +2,5 @@
 # 接口定义
 interface:
   display_name: "A 股可视化"
-  short_description: "面向个股/指数/板块/市场的图表路由与生成。"
-  default_prompt: "使用 $visualization 选择合适的图表 API，并从市场数据生成可靠的可视化输出。"
+  short_description: "面向个股/指数/板块/市场的图表路由与生成，支持脚本扩展新增图表函数。"
+  default_prompt: "使用 $visualization 选择合适的图表 API，并可通过 visualization scripts 扩展新图表函数，生成可靠的可视化输出。"

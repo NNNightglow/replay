@@ -8,7 +8,11 @@
 日期: 2025-01-24
 """
 
+import importlib.util
 import polars as pl
+from pathlib import Path
+from types import ModuleType
+import threading
 from typing import List, Dict, Any, Optional
 import warnings
 
@@ -26,6 +30,32 @@ from .visualizers import (
 
 # 屏蔽pandas警告
 warnings.filterwarnings('ignore')
+
+_VISUALIZATION_GATEWAY_PATH = (
+    Path(__file__).resolve().parent.parent
+    / "skills"
+    / "visualization"
+    / "scripts"
+    / "visualization_gateway.py"
+)
+_VISUALIZATION_GATEWAY_MODULE: Optional[ModuleType] = None
+_VISUALIZATION_GATEWAY_LOCK = threading.Lock()
+
+
+def _load_visualization_gateway() -> ModuleType:
+    global _VISUALIZATION_GATEWAY_MODULE
+    with _VISUALIZATION_GATEWAY_LOCK:
+        if _VISUALIZATION_GATEWAY_MODULE is not None:
+            return _VISUALIZATION_GATEWAY_MODULE
+        if not _VISUALIZATION_GATEWAY_PATH.exists():
+            raise FileNotFoundError(f"Visualization gateway not found: {_VISUALIZATION_GATEWAY_PATH}")
+        spec = importlib.util.spec_from_file_location("visualization_gateway", _VISUALIZATION_GATEWAY_PATH)
+        if spec is None or spec.loader is None:
+            raise RuntimeError(f"Failed to load visualization gateway spec: {_VISUALIZATION_GATEWAY_PATH}")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _VISUALIZATION_GATEWAY_MODULE = module
+        return module
 
 class VisualizerManager:
     """可视化管理器，提供统一的可视化接口"""
@@ -182,3 +212,15 @@ class VisualizerManager:
         """绘制模型一选股结果"""
         return ModelVisualizer.plot_model_one_stocks(model_one_stocks)
 
+    # ========== Skill 扩展图表 ==========
+    @staticmethod
+    def list_skill_charts(force_reload: bool = False) -> List[Dict[str, Any]]:
+        """列出 skills/visualization/scripts 中可用的扩展图表函数"""
+        module = _load_visualization_gateway()
+        return module.list_charts(force_reload=force_reload)
+
+    @staticmethod
+    def render_skill_chart(chart_id: str, **kwargs) -> Dict[str, Any]:
+        """按 chart_id 调用 skills/visualization/scripts 下注册的绘图函数"""
+        module = _load_visualization_gateway()
+        return module.render_chart(chart_id=chart_id, **kwargs)

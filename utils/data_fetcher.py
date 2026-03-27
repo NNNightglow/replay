@@ -594,7 +594,8 @@ class DataFetcher:
             index_metadata_updated = self.index_metadata_manager.update_metadata(
                 progress_callback=lambda current, total, message:
                     progress_callback(30 + int(current / 3), 100, message)
-                    if progress_callback else None
+                    if progress_callback else None,
+                fill_gaps=False,
             )
             print("✅ 指数元数据更新完成" if index_metadata_updated else "❌ 指数元数据更新失败")
         else:

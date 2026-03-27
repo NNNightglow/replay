@@ -486,6 +486,10 @@ class ApiService {
     return api.post(`/api/strategy-watch/strategies/${strategyId}/generate-view`, payload)
   }
 
+  static async getStrategyAgentLogs(params = {}) {
+    return api.get('/api/strategy-watch/agent-logs', { params, hideLoading: true })
+  }
+
   static async getMemoryProfiles() {
     return api.get('/api/strategy-watch/memory-profiles')
   }

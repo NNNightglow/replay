@@ -6,17 +6,17 @@
         <p>上传资料并构建知识库，用策略对话快速分析与复盘。</p>
       </div>
       <div class="header-actions">
-        <el-radio-group v-model="activeMode" size="large" class="mode-switch">
-          <el-radio-button label="chat">对话</el-radio-button>
-          <el-radio-button label="watch">看盘</el-radio-button>
+        <el-radio-group v-model="topMode" size="large" class="mode-switch">
+          <el-radio-button label="dialog">对话</el-radio-button>
+          <el-radio-button label="strategy_analysis">策略</el-radio-button>
         </el-radio-group>
-        <el-tag :type="runtime.api_key_configured ? 'success' : 'warning'" size="large">
+        <el-tag class="runtime-tag" :type="runtime.api_key_configured ? 'success' : 'warning'" size="large">
           {{ runtime.api_key_configured ? `模型已连接：${runtime.model}` : '未配置模型 API Key，请先配置 .env' }}
         </el-tag>
       </div>
     </div>
 
-    <div v-if="activeMode === 'chat'" class="page-body" :class="{ 'chat-sidebar-collapsed': chatSidebarCollapsed }">
+    <div v-if="isReplayChatMode" class="page-body" :class="{ 'chat-sidebar-collapsed': chatSidebarCollapsed }">
       <aside class="left-panel" :class="{ 'chat-sidebar-collapsed': chatSidebarCollapsed }">
         <el-card class="panel-card conversation-card" :class="{ collapsed: chatSidebarCollapsed }" shadow="never">
           <template #header>
@@ -160,7 +160,13 @@
           </template>
 
           <div ref="messagesRef" class="messages-wrap">
-            <div v-for="msg in messages" :key="msg.id" class="message-row" :class="msg.role">
+            <div
+              v-for="msg in messages"
+              v-if="!shouldHideAssistantMessage(msg)"
+              :key="msg.id"
+              class="message-row"
+              :class="msg.role"
+            >
               <div class="message-stack">
                 <div class="bubble">
                   <div class="role">
@@ -221,6 +227,26 @@
                 </div>
               </div>
             </div>
+            <div v-if="strategyEditRun.active" class="message-row assistant">
+              <div class="message-stack">
+                <div class="bubble strategy-edit-run-bubble">
+                  <div class="role">
+                    策略编辑师
+                    <span v-if="selectedAgentName" class="agent-chip">{{ selectedAgentName }}</span>
+                  </div>
+                  <div class="strategy-edit-run-question">问题：{{ strategyEditRun.question }}</div>
+                  <div class="strategy-edit-run-status">
+                    <span class="strategy-edit-run-spinner"></span>
+                    <span class="strategy-edit-run-title">{{ strategyEditRunCurrentTitle }}</span>
+                  </div>
+                  <div class="strategy-edit-run-steps">
+                    <div v-for="(step, idx) in strategyEditRunRecentSteps" :key="`run-step-${idx}`">
+                      {{ step }}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
             <el-empty v-if="!messages.length" description="暂无消息，开始对话吧" :image-size="80" />
           </div>
 
@@ -234,13 +260,10 @@
                   :value="model.value"
                 />
               </el-select>
-              <el-select v-model="selectedAgentName" placeholder="选择 Agent" style="width: 260px">
-                <el-option
-                  v-for="agent in runtime.agents || []"
-                  :key="agent.name"
-                  :label="`${agent.display_name} (${agent.name})`"
-                  :value="agent.name"
-                />
+              <el-select v-model="activeMode" placeholder="模式" style="width: 140px">
+                <el-option label="对话" value="dialog" />
+                <el-option label="爬虫" value="crawler" />
+                <el-option label="策略编辑" value="strategy_edit" />
               </el-select>
               <el-select v-model="activeMemoryProfileId" placeholder="长期记忆（人格）" style="width: 220px">
                 <el-option label="不使用长期记忆" value="" />
@@ -363,7 +386,7 @@
                 v-model="inputText"
                 type="textarea"
                 :rows="4"
-                placeholder="输入问题或指令，Ctrl+Enter 发送。支持 @agent 指定角色。"
+                placeholder="输入问题或指令，Ctrl+Enter 发送。可在顶部切换对话/爬虫/策略分析模式。"
                 @keydown.ctrl.enter.prevent="sendMessage"
               />
               <el-button type="primary" :loading="sending" @click="sendMessage">
@@ -404,7 +427,6 @@
               <div class="strategy-main">
                 <div class="title">{{ item.name }}</div>
                 <div class="meta">
-                  <el-tag size="small" type="info">{{ getStrategyViewLabel(item.view_type) }}</el-tag>
                   <span>{{ formatDateTime(item.updated_at) }}</span>
                 </div>
               </div>
@@ -426,6 +448,34 @@
             <div class="card-header">
               <span>{{ activeStrategy ? activeStrategy.name : '未选择策略' }}</span>
               <div class="card-actions">
+                <el-button
+                  v-if="activeStrategy && !isKeyLevelStrategy"
+                  link
+                  @click="generateStrategyView"
+                >
+                  Agent生成视图
+                </el-button>
+                <el-button
+                  v-if="activeStrategy && !isKeyLevelStrategy"
+                  link
+                  @click="openWidgetEditor"
+                >
+                  新增图表
+                </el-button>
+                <el-switch
+                  v-if="activeStrategy && !isKeyLevelStrategy"
+                  v-model="watchLayoutEditMode"
+                  inline-prompt
+                  active-text="编辑"
+                  inactive-text="浏览"
+                />
+                <el-button
+                  v-if="activeStrategy && !isKeyLevelStrategy && watchLayoutEditMode"
+                  link
+                  @click="saveWatchWidgetConfig({ silent: false })"
+                >
+                  保存布局
+                </el-button>
                 <el-button link @click="switchToChat">进入对话设计</el-button>
               </div>
             </div>
@@ -524,21 +574,59 @@
               <div class="placeholder-title">图表加载失败</div>
               <div class="placeholder-desc">{{ watchError }}</div>
             </div>
-            <div v-else class="watch-grid">
-              <div v-for="widget in watchWidgets" :key="widget.id" class="watch-widget">
-                <div class="widget-header">
-                  <span>{{ widget.title }}</span>
+            <div v-else class="watch-layout">
+              <div
+                ref="watchBoardRef"
+                class="watch-layout-board"
+                :class="{ editing: watchLayoutEditMode }"
+                :style="watchBoardStyle"
+              >
+                <div
+                  v-for="widget in watchWidgets"
+                  :key="widget.id"
+                  class="watch-widget"
+                  :class="{
+                    editable: watchLayoutEditMode,
+                    moving: watchDraggingWidgetId === widget.id,
+                    resizing: watchResizingWidgetId === widget.id
+                  }"
+                  :style="watchWidgetStyle(widget)"
+                >
+                  <div
+                    class="widget-header"
+                    :class="{ draggable: watchLayoutEditMode }"
+                    @mousedown.stop.prevent="startWatchWidgetDrag(widget, $event)"
+                  >
+                    <span>{{ widget.title }}</span>
+                    <div class="widget-header-actions">
+                      <el-button
+                        v-if="watchLayoutEditMode"
+                        type="danger"
+                        link
+                        @click.stop="removeWatchWidget(widget.id)"
+                      >
+                        删除
+                      </el-button>
+                    </div>
+                  </div>
+                  <div class="watch-widget-body">
+                    <div v-if="widget.error" class="widget-error">{{ widget.error }}</div>
+                    <EChartsRenderer
+                      v-else
+                      :chart-html="widget.chartHtml"
+                      :height="getWidgetChartHeight(widget)"
+                    />
+                  </div>
+                  <div
+                    v-if="watchLayoutEditMode"
+                    class="widget-resize-handle"
+                    @mousedown.stop.prevent="startWatchWidgetResize(widget, $event)"
+                  ></div>
                 </div>
-                <div v-if="widget.error" class="widget-error">{{ widget.error }}</div>
-                <EChartsRenderer
-                  v-else
-                  :chart-html="widget.chartHtml"
-                  :height="widget.height || '360px'"
-                />
               </div>
               <el-empty
                 v-if="!watchWidgets.length && !watchLoading"
-                description="暂无图表配置，可通过 Agent 生成视图"
+                description="暂无图表配置，可通过“新增图表”或 Agent 生成视图补充"
                 :image-size="90"
               />
             </div>
@@ -714,6 +802,86 @@
       <template #footer>
         <el-button @click="groupTransferVisible = false">取消</el-button>
         <el-button type="primary" @click="submitGroupTransfer">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="widgetEditorVisible" title="新增看盘图表" width="980px">
+      <div class="widget-tool-layout">
+        <aside class="widget-tool-sidebar">
+          <div
+            v-for="category in widgetToolCategories"
+            :key="`tool-cat-${category.id}`"
+            class="widget-tool-category"
+            :class="{ active: category.id === widgetToolActiveCategoryId }"
+            @click="switchWidgetToolCategory(category.id)"
+          >
+            {{ category.label }}
+          </div>
+        </aside>
+        <section class="widget-tool-main">
+          <div class="widget-tool-main-title">{{ activeWidgetToolCategory?.label || '图表' }}</div>
+          <el-collapse v-model="widgetToolExpandedTemplateIds" class="widget-tool-collapse">
+            <el-collapse-item
+              v-for="tpl in activeWidgetToolTemplates"
+              :key="`tpl-${tpl.id}`"
+              :name="tpl.id"
+              :title="tpl.title"
+            >
+              <div class="widget-tool-item-desc">{{ tpl.desc || '按需配置参数后新增到看盘界面。' }}</div>
+              <div class="widget-tool-item-form">
+                <el-form label-width="96px" size="small">
+                  <el-form-item label="图表标题">
+                    <el-input
+                      :model-value="getWidgetToolDraftValue(tpl.id, 'title')"
+                      @update:model-value="setWidgetToolDraftValue(tpl.id, 'title', $event)"
+                      maxlength="40"
+                      show-word-limit
+                    />
+                  </el-form-item>
+                  <template v-for="field in (tpl.fields || [])" :key="`field-${tpl.id}-${field.key}`">
+                    <el-form-item :label="field.label">
+                      <el-input
+                        v-if="field.type === 'text'"
+                        :model-value="getWidgetToolDraftValue(tpl.id, field.key)"
+                        :placeholder="field.placeholder || ''"
+                        @update:model-value="setWidgetToolDraftValue(tpl.id, field.key, $event)"
+                      />
+                      <el-input-number
+                        v-else-if="field.type === 'number'"
+                        :model-value="getWidgetToolDraftValue(tpl.id, field.key)"
+                        :min="field.min ?? 0"
+                        :max="field.max ?? 10000"
+                        :step="field.step ?? 1"
+                        style="width: 220px"
+                        @update:model-value="setWidgetToolDraftValue(tpl.id, field.key, $event)"
+                      />
+                      <el-select
+                        v-else-if="field.type === 'select'"
+                        :model-value="getWidgetToolDraftValue(tpl.id, field.key)"
+                        style="width: 260px"
+                        @update:model-value="setWidgetToolDraftValue(tpl.id, field.key, $event)"
+                      >
+                        <el-option
+                          v-for="opt in (field.options || [])"
+                          :key="`opt-${tpl.id}-${field.key}-${opt.value}`"
+                          :label="opt.label"
+                          :value="opt.value"
+                        />
+                      </el-select>
+                    </el-form-item>
+                  </template>
+                </el-form>
+                <div class="widget-tool-item-actions">
+                  <el-button type="primary" size="small" @click="addWidgetFromToolTemplate(tpl)">新增此图表</el-button>
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
+        </section>
+      </div>
+      <template #footer>
+        <el-button @click="widgetEditorVisible = false">取消</el-button>
+        <el-button type="primary" @click="widgetEditorVisible = false">完成</el-button>
       </template>
     </el-dialog>
 
@@ -946,7 +1114,7 @@ const runtime = ref({
   agents: []
 })
 
-const activeMode = ref('chat')
+const activeMode = ref('dialog')
 const conversations = ref([])
 const activeConversationId = ref('')
 const messages = ref([])
@@ -977,7 +1145,28 @@ const groupTransferForm = ref({
   mode: 'move'
 })
 
-const selectedAgentName = ref('planner_agent')
+const selectedAgentName = ref('dialog_agent')
+const MODE_AGENT_MAP = Object.freeze({
+  dialog: 'dialog_agent',
+  crawler: 'engineer_agent',
+  strategy_edit: 'architect_agent',
+  strategy_analysis: 'analyst_agent'
+})
+const modeAgentSelection = ref({
+  dialog: '',
+  crawler: '',
+  strategy_edit: '',
+  strategy_analysis: ''
+})
+const isReplayChatMode = computed(() =>
+  activeMode.value === 'dialog' || activeMode.value === 'crawler' || activeMode.value === 'strategy_edit'
+)
+const topMode = computed({
+  get: () => (activeMode.value === 'strategy_analysis' ? 'strategy_analysis' : 'dialog'),
+  set: (next) => {
+    activeMode.value = next === 'strategy_analysis' ? 'strategy_analysis' : 'dialog'
+  }
+})
 const DEFAULT_MODEL_OPTIONS = [
   { label: 'DeepSeek v3.2', value: 'DeepSeek3.2' },
   { label: 'DeepSeek v3.2 Thinking', value: 'deepseek-v3.2-thinking' },
@@ -1088,18 +1277,117 @@ const memoryPortraitForm = ref({
   style_constraints: ''
 })
 
-const strategyViewOptions = [
-  { label: '基础看盘', value: 'basic' },
-  { label: '趋势跟踪', value: 'trend' },
-  { label: '突破监控', value: 'breakout' },
-  { label: '量能观察', value: 'volume' },
-  { label: '关键位看板', value: 'key_levels' }
+const marketSentimentChartOptions = [
+  { key: 'red_ratio_and_amount', title: '红盘率与成交额' },
+  { key: 'limit_up_count', title: '涨停/跌停统计' },
+  { key: 'ground_ceiling_count', title: '地天板/天地板' },
+  { key: 'continuous_limit_up', title: '连板天梯' },
+  { key: 'change_distribution', title: '涨跌幅分布' }
+]
+const widgetToolCategories = [
+  {
+    id: 'index',
+    label: '指数',
+    templates: [
+      {
+        id: 'index_kline',
+        type: 'index_kline',
+        title: '指数K线',
+        desc: '查看指数趋势与成交量。',
+        defaults: {
+          index_name: '上证指数',
+          days_range: 60
+        },
+        fields: [
+          { key: 'index_name', label: '指数名称', type: 'text', placeholder: '如：上证指数、创业板指' },
+          { key: 'days_range', label: '回看天数', type: 'number', min: 20, max: 500, step: 5 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'sector',
+    label: '板块',
+    templates: [
+      {
+        id: 'sector_kline',
+        type: 'sector_kline',
+        title: '板块K线',
+        desc: '查看行业/概念板块走势。',
+        defaults: {
+          sector_name: '半导体',
+          days_range: 60
+        },
+        fields: [
+          { key: 'sector_name', label: '板块名称', type: 'text', placeholder: '如：半导体、证券' },
+          { key: 'days_range', label: '回看天数', type: 'number', min: 20, max: 500, step: 5 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'stock',
+    label: '个股',
+    templates: [
+      {
+        id: 'stock_kline',
+        type: 'stock_kline',
+        title: '个股K线',
+        desc: '查看个股K线与均线。',
+        defaults: {
+          stock_code: '000001',
+          days: 120
+        },
+        fields: [
+          { key: 'stock_code', label: '股票代码', type: 'text', placeholder: '6位代码，如 600519' },
+          { key: 'days', label: '回看天数', type: 'number', min: 20, max: 500, step: 5 }
+        ]
+      }
+    ]
+  },
+  {
+    id: 'market',
+    label: '市场',
+    templates: [
+      ...marketSentimentChartOptions.map(item => ({
+        id: `market_sentiment_${item.key}`,
+        type: 'market_sentiment_chart',
+        title: item.title,
+        desc: '市场情绪图表。',
+        defaults: {
+          chart_key: item.key,
+          days_back: 30
+        },
+        fields: [
+          { key: 'days_back', label: '回看天数', type: 'number', min: 10, max: 240, step: 5 }
+        ]
+      })),
+      {
+        id: 'market_volume',
+        type: 'market_volume',
+        title: '市场量能对比',
+        desc: '对比最近两个交易日成交额。',
+        defaults: {},
+        fields: []
+      }
+    ]
+  }
 ]
 const strategies = ref([])
 const activeStrategyId = ref('')
 const watchLoading = ref(false)
 const watchWidgets = ref([])
 const watchError = ref('')
+const watchWidgetDefs = ref([])
+const watchLayoutEditMode = ref(false)
+const watchBoardRef = ref(null)
+const watchDraggingWidgetId = ref('')
+const watchResizingWidgetId = ref('')
+const watchPersistTimer = ref(null)
+const widgetEditorVisible = ref(false)
+const widgetToolActiveCategoryId = ref(widgetToolCategories[0]?.id || '')
+const widgetToolExpandedTemplateIds = ref([])
+const widgetToolDrafts = ref({})
 
 const keyWatchlist = ref([])
 const keySelectedCode = ref('')
@@ -1120,6 +1408,17 @@ const sending = ref(false)
 const uploading = ref(false)
 const uploadJobs = ref([])
 const jobPollingTimer = ref(null)
+const strategyEditRun = ref({
+  active: false,
+  question: '',
+  conversationId: '',
+  assistantMessageId: '',
+  startedAt: '',
+  bucket: '',
+  steps: [],
+  seenKeys: {}
+})
+const strategyEditRunPollTimer = ref(null)
 
 const usableResources = computed(() => resources.value.filter(item => item.status === 'ok'))
 const buildStrategyReferenceItem = (strategy) => {
@@ -1181,6 +1480,19 @@ const activeStrategy = computed(() => {
 const strategyTaggedCount = computed(() => {
   return (strategies.value || []).length
 })
+const watchBoardHeight = computed(() => {
+  if (!watchWidgets.value.length) return 360
+  const bottom = watchWidgets.value.reduce((max, item) => {
+    const layout = item?.layout || {}
+    const y = Number(layout.y || 0)
+    const h = Number(layout.h || 360)
+    return Math.max(max, y + h)
+  }, 0)
+  return Math.max(360, Math.ceil(bottom + 24))
+})
+const watchBoardStyle = computed(() => {
+  return { height: `${watchBoardHeight.value}px` }
+})
 const targetGroupOptions = computed(() => {
   const sourceId = groupTransferForm.value.source_group_id
   return resourceGroups.value.filter(item => item.group_id !== sourceId)
@@ -1207,9 +1519,308 @@ const effectivePromptTemplate = computed(() => {
   if (selectedPromptTemplateId.value === 'none') return ''
   return (selectedPromptTemplate.value?.content || '').trim()
 })
+const strategyEditRunCurrentTitle = computed(() => {
+  const steps = Array.isArray(strategyEditRun.value.steps) ? strategyEditRun.value.steps : []
+  if (!steps.length) return '正在调用工具...'
+  return String(steps[steps.length - 1] || '正在调用工具...')
+})
+const strategyEditRunRecentSteps = computed(() => {
+  const steps = Array.isArray(strategyEditRun.value.steps) ? strategyEditRun.value.steps : []
+  if (steps.length <= 4) return steps
+  return steps.slice(steps.length - 4)
+})
+const activeWidgetToolCategory = computed(() => {
+  return widgetToolCategories.find(item => item.id === widgetToolActiveCategoryId.value) || widgetToolCategories[0] || null
+})
+const activeWidgetToolTemplates = computed(() => activeWidgetToolCategory.value?.templates || [])
 
 const normalizeStockCode = (value) => String(value || '').replace(/\D/g, '').padStart(6, '0').slice(-6)
+const normalizeStockWidgetCode = (value) => {
+  const digits = String(value || '').replace(/\D/g, '').slice(-6)
+  if (!digits) return '000001'
+  return digits.padStart(6, '0')
+}
 const clampNumber = (value, min, max) => Math.max(min, Math.min(max, value))
+const WATCH_WIDGET_GAP = 14
+const WATCH_WIDGET_MIN_WIDTH = 300
+const WATCH_WIDGET_MIN_HEIGHT = 240
+const WATCH_WIDGET_MAX_WIDTH = 1500
+const WATCH_LAYOUT_SAVE_DEBOUNCE_MS = 700
+const watchPointerState = {
+  mode: '',
+  widgetId: '',
+  startX: 0,
+  startY: 0,
+  startLayout: { x: 0, y: 0, w: 0, h: 0 }
+}
+
+const getSentimentChartTitle = (chartKey) => {
+  const found = marketSentimentChartOptions.find(item => item.key === chartKey)
+  return found?.title || '市场情绪图'
+}
+
+const buildWidgetTitle = (type, params = {}) => {
+  if (type === 'index_kline') return `${params.index_name || '上证指数'} K线`
+  if (type === 'sector_kline') return `${params.sector_name || '板块'} K线`
+  if (type === 'stock_kline') return `${params.stock_code || '000001'} K线`
+  if (type === 'market_volume') return '市场量能对比'
+  if (type === 'market_sentiment_chart') return getSentimentChartTitle(params.chart_key)
+  return '自定义图表'
+}
+
+const genWidgetId = () => `widget_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+
+const getDefaultWidgetSize = (type) => {
+  if (type === 'index_kline' || type === 'sector_kline' || type === 'stock_kline') return { w: 620, h: 520 }
+  if (type === 'market_volume') return { w: 620, h: 420 }
+  return { w: 500, h: 420 }
+}
+
+const getDefaultWidgetLayout = (index, type) => {
+  const size = getDefaultWidgetSize(type)
+  const column = index % 2
+  const row = Math.floor(index / 2)
+  return {
+    x: column * (size.w + WATCH_WIDGET_GAP),
+    y: row * (size.h + WATCH_WIDGET_GAP),
+    w: size.w,
+    h: size.h
+  }
+}
+
+const normalizeWidgetParams = (type, rawParams = {}) => {
+  const source = rawParams && typeof rawParams === 'object' ? rawParams : {}
+  if (type === 'index_kline') {
+    return {
+      index_name: String(source.index_name || source.index || '上证指数').trim() || '上证指数',
+      days_range: clampNumber(Number(source.days_range || source.days || 60) || 60, 20, 500)
+    }
+  }
+  if (type === 'sector_kline') {
+    return {
+      sector_name: String(source.sector_name || source.sector || source.name || '半导体').trim() || '半导体',
+      days_range: clampNumber(Number(source.days_range || source.days || 60) || 60, 20, 500)
+    }
+  }
+  if (type === 'stock_kline') {
+    return {
+      stock_code: normalizeStockWidgetCode(source.stock_code || source.code || '000001'),
+      days: clampNumber(Number(source.days || source.days_range || 120) || 120, 20, 500)
+    }
+  }
+  if (type === 'market_sentiment_chart') {
+    const chartKey = String(source.chart_key || source.key || 'red_ratio_and_amount').trim() || 'red_ratio_and_amount'
+    const validChartKey = marketSentimentChartOptions.some(item => item.key === chartKey)
+      ? chartKey
+      : 'red_ratio_and_amount'
+    return {
+      chart_key: validChartKey,
+      days_back: clampNumber(Number(source.days_back || source.days || 30) || 30, 10, 240)
+    }
+  }
+  if (type === 'market_volume') {
+    return {}
+  }
+  return { ...source }
+}
+
+const normalizeWidgetLayout = (rawLayout, index, type) => {
+  const defaults = getDefaultWidgetLayout(index, type)
+  const source = rawLayout && typeof rawLayout === 'object' ? rawLayout : {}
+  const width = clampNumber(Number(source.w || defaults.w) || defaults.w, WATCH_WIDGET_MIN_WIDTH, WATCH_WIDGET_MAX_WIDTH)
+  const height = clampNumber(Number(source.h || defaults.h) || defaults.h, WATCH_WIDGET_MIN_HEIGHT, 1800)
+  return {
+    x: Math.max(0, Number(source.x || defaults.x) || defaults.x),
+    y: Math.max(0, Number(source.y || defaults.y) || defaults.y),
+    w: width,
+    h: height
+  }
+}
+
+const expandLegacyBundleWidget = (widget) => {
+  const source = widget && typeof widget === 'object' ? widget : {}
+  if (source.type !== 'market_sentiment_bundle') return [source]
+  const baseId = String(source.id || genWidgetId()).trim() || genWidgetId()
+  const daysBack = clampNumber(Number(source?.params?.days_back || 30) || 30, 10, 240)
+  return marketSentimentChartOptions.map((item, idx) => ({
+    id: `${baseId}-${item.key}`,
+    type: 'market_sentiment_chart',
+    title: item.title,
+    params: {
+      chart_key: item.key,
+      days_back: daysBack
+    },
+    layout: idx === 0 ? source.layout : null
+  }))
+}
+
+const normalizeWidgetDefinitions = (rawWidgets, viewType = 'basic', useFallback = true) => {
+  let source = []
+  if (Array.isArray(rawWidgets)) {
+    source = rawWidgets
+  } else if (useFallback) {
+    source = buildDefaultWidgets(viewType)
+  }
+  if (!source.length) return []
+  const expanded = []
+  source.forEach(item => {
+    expandLegacyBundleWidget(item).forEach(one => expanded.push(one))
+  })
+
+  const usedIds = new Set()
+  return expanded.map((item, index) => {
+    const raw = item && typeof item === 'object' ? item : {}
+    const type = String(raw.type || '').trim() || 'market_sentiment_chart'
+    const params = normalizeWidgetParams(type, raw.params || {})
+    let id = String(raw.id || '').trim()
+    if (!id) id = genWidgetId()
+    while (usedIds.has(id)) {
+      id = `${id}_${usedIds.size + 1}`
+    }
+    usedIds.add(id)
+    const title = String(raw.title || '').trim() || buildWidgetTitle(type, params)
+    return {
+      id,
+      type,
+      title,
+      params,
+      layout: normalizeWidgetLayout(raw.layout, index, type)
+    }
+  })
+}
+
+const serializeWidgetDef = (widget) => {
+  const raw = widget && typeof widget === 'object' ? widget : {}
+  const layout = normalizeWidgetLayout(raw.layout, 0, raw.type || 'market_sentiment_chart')
+  return {
+    id: String(raw.id || '').trim() || genWidgetId(),
+    type: String(raw.type || '').trim() || 'market_sentiment_chart',
+    title: String(raw.title || '').trim() || buildWidgetTitle(raw.type, raw.params || {}),
+    params: normalizeWidgetParams(raw.type, raw.params || {}),
+    layout: {
+      x: Math.round(layout.x),
+      y: Math.round(layout.y),
+      w: Math.round(layout.w),
+      h: Math.round(layout.h)
+    }
+  }
+}
+
+const getNextWidgetLayout = (type) => {
+  const size = getDefaultWidgetSize(type)
+  const maxBottom = watchWidgetDefs.value.reduce((max, item) => {
+    const layout = item?.layout || {}
+    return Math.max(max, Number(layout.y || 0) + Number(layout.h || 0))
+  }, 0)
+  return {
+    x: 0,
+    y: maxBottom ? maxBottom + WATCH_WIDGET_GAP : 0,
+    w: size.w,
+    h: size.h
+  }
+}
+
+const ensureWidgetToolDraft = (template) => {
+  if (!template?.id) return {}
+  const templateId = template.id
+  const defaults = template.defaults && typeof template.defaults === 'object'
+    ? { ...template.defaults }
+    : {}
+  const current = widgetToolDrafts.value[templateId]
+  const draft = current && typeof current === 'object' ? { ...current } : {}
+  let changed = false
+  Object.keys(defaults).forEach(key => {
+    if (!(key in draft)) {
+      draft[key] = defaults[key]
+      changed = true
+    }
+  })
+  if (!('title' in draft)) {
+    draft.title = ''
+    changed = true
+  }
+  if (!current || changed) {
+    widgetToolDrafts.value = {
+      ...widgetToolDrafts.value,
+      [templateId]: draft
+    }
+  }
+  return widgetToolDrafts.value[templateId]
+}
+
+const switchWidgetToolCategory = (categoryId) => {
+  if (!categoryId) return
+  widgetToolActiveCategoryId.value = categoryId
+  const category = widgetToolCategories.find(item => item.id === categoryId)
+  const templates = Array.isArray(category?.templates) ? category.templates : []
+  templates.forEach(item => ensureWidgetToolDraft(item))
+  widgetToolExpandedTemplateIds.value = templates.length ? [templates[0].id] : []
+}
+
+const getWidgetToolDraftValue = (templateId, key) => {
+  const draft = widgetToolDrafts.value[templateId]
+  if (!draft || typeof draft !== 'object') return undefined
+  return draft[key]
+}
+
+const setWidgetToolDraftValue = (templateId, key, value) => {
+  const current = widgetToolDrafts.value[templateId]
+  const draft = current && typeof current === 'object' ? { ...current } : {}
+  draft[key] = value
+  widgetToolDrafts.value = {
+    ...widgetToolDrafts.value,
+    [templateId]: draft
+  }
+}
+
+const openWidgetEditor = () => {
+  if (!activeStrategy.value?.id) return
+  widgetToolDrafts.value = {}
+  const firstCategoryId = widgetToolCategories[0]?.id || ''
+  widgetToolActiveCategoryId.value = firstCategoryId
+  switchWidgetToolCategory(firstCategoryId)
+  widgetEditorVisible.value = true
+}
+
+const getWidgetChartHeight = (widget) => {
+  const raw = Number(widget?.layout?.h || 360) - 58
+  return `${Math.max(180, Math.floor(raw))}px`
+}
+
+const watchWidgetStyle = (widget) => {
+  const layout = widget?.layout || {}
+  return {
+    left: `${Math.max(0, Number(layout.x || 0))}px`,
+    top: `${Math.max(0, Number(layout.y || 0))}px`,
+    width: `${clampNumber(Number(layout.w || 500), WATCH_WIDGET_MIN_WIDTH, WATCH_WIDGET_MAX_WIDTH)}px`,
+    height: `${clampNumber(Number(layout.h || 420), WATCH_WIDGET_MIN_HEIGHT, 1800)}px`
+  }
+}
+
+const patchWidgetById = (targetList, widgetId, updater) => {
+  const next = targetList.map(item => {
+    if (!item || item.id !== widgetId) return item
+    return updater(item)
+  })
+  return next
+}
+
+const patchWatchWidgetLayout = (widgetId, patch) => {
+  watchWidgetDefs.value = patchWidgetById(watchWidgetDefs.value, widgetId, item => ({
+    ...item,
+    layout: {
+      ...(item.layout || {}),
+      ...patch
+    }
+  }))
+  watchWidgets.value = patchWidgetById(watchWidgets.value, widgetId, item => ({
+    ...item,
+    layout: {
+      ...(item.layout || {}),
+      ...patch
+    }
+  }))
+}
 
 const loadPromptTemplatesFromStorage = () => {
   if (typeof window === 'undefined') return
@@ -1856,15 +2467,10 @@ const buildCrawlerAgentSummary = (msg) => {
 }
 
 const getDisplayedAssistantContent = (msg) => {
-  if (msg?.agent_name === 'crawler_agent' && getCrawlResults(msg).length) {
+  if ((msg?.conversation_mode === 'crawler' || msg?.provider === 'crawler') && getCrawlResults(msg).length) {
     return buildCrawlerAgentSummary(msg)
   }
   return msg?.content || ''
-}
-
-const getStrategyViewLabel = (type) => {
-  const found = strategyViewOptions.find(item => item.value === type)
-  return found ? found.label : '自定义视图'
 }
 
 const replaceStrategyLocal = (updated) => {
@@ -2123,6 +2729,23 @@ const startKeyPaneResize = (event) => {
   document.addEventListener('mouseup', stopKeyPaneResize)
 }
 
+const resolveModeAgentName = (mode) => {
+  const mapped = MODE_AGENT_MAP[mode] || MODE_AGENT_MAP.dialog
+  const agents = Array.isArray(runtime.value?.agents) ? runtime.value.agents : []
+  if (agents.some(item => item?.name === mapped)) return mapped
+  return agents[0]?.name || mapped
+}
+
+const syncAgentByMode = (force = false) => {
+  const mode = activeMode.value
+  const remembered = modeAgentSelection.value[mode]
+  if (!force && remembered) {
+    selectedAgentName.value = remembered
+    return
+  }
+  selectedAgentName.value = resolveModeAgentName(mode)
+}
+
 const loadRuntime = async () => {
   const res = await ApiService.getStrategyRuntime()
   runtime.value = res.data || runtime.value
@@ -2151,9 +2774,7 @@ const loadRuntime = async () => {
   if (!selectedPortraitModel.value) {
     selectedPortraitModel.value = selectedModel.value || (modelOptions.value[0]?.value || '')
   }
-  if (!selectedAgentName.value && runtime.value.agents?.length) {
-    selectedAgentName.value = runtime.value.agents[0].name
-  }
+  syncAgentByMode()
 }
 
 const loadConversations = async () => {
@@ -2183,6 +2804,7 @@ const createConversation = async () => {
 }
 
 const switchConversation = async (id) => {
+  stopStrategyEditRun()
   activeConversationId.value = id
   await loadMessages(id)
 }
@@ -2422,54 +3044,22 @@ const setActiveStrategy = async (strategyId) => {
   }
 }
 
-const updateActiveStrategyView = async (viewType) => {
-  if (!activeStrategyId.value) return
-  try {
-    await ApiService.updateStrategyWatchStrategy(activeStrategyId.value, { view_type: viewType })
-    await loadStrategies()
-  } catch (error) {
-    console.error(error)
-  }
-}
-
 const buildDefaultWidgets = (viewType) => {
   if (viewType === 'key_levels') return []
-  if (viewType === 'trend') {
-    return [
-      {
-        id: 'index-kline',
-        type: 'index_kline',
-        title: '主板指数趋势',
-        params: { index_name: '上证指数', days_range: 60 }
-      }
-    ]
-  }
-  if (viewType === 'breakout') {
-    return [
-      {
-        id: 'market-sentiment',
-        type: 'market_sentiment_bundle',
-        title: '连板与情绪概览',
-        params: { days_back: 60 }
-      }
-    ]
-  }
-  if (viewType === 'volume') {
-    return [
-      {
-        id: 'market-volume',
-        type: 'market_volume',
-        title: '市场量能对比',
-        params: {}
-      }
-    ]
-  }
   return [
     {
-      id: 'market-sentiment',
-      type: 'market_sentiment_bundle',
-      title: '市场情绪组合',
-      params: { days_back: 30 }
+      id: 'market-sentiment-red-ratio',
+      type: 'market_sentiment_chart',
+      title: '红盘率与成交额',
+      params: { chart_key: 'red_ratio_and_amount', days_back: 30 },
+      layout: { x: 0, y: 0, w: 640, h: 420 }
+    },
+    {
+      id: 'index-kline',
+      type: 'index_kline',
+      title: '上证指数 K线',
+      params: { index_name: '上证指数', days_range: 60 },
+      layout: { x: 0, y: 434, w: 720, h: 520 }
     }
   ]
 }
@@ -2477,19 +3067,168 @@ const buildDefaultWidgets = (viewType) => {
 const buildWidgetsFromStrategy = (strategy) => {
   if (!strategy) return []
   const config = strategy.config || {}
-  if (Array.isArray(config.widgets) && config.widgets.length) {
-    return config.widgets
+  if (Array.isArray(config.widgets)) {
+    return normalizeWidgetDefinitions(config.widgets, strategy.view_type || 'basic', false)
   }
-  return buildDefaultWidgets(strategy.view_type || 'basic')
+  return normalizeWidgetDefinitions(null, strategy.view_type || 'basic', true)
+}
+
+const saveWatchWidgetConfig = async ({ silent = true } = {}) => {
+  const strategy = activeStrategy.value
+  if (!strategy?.id || isKeyLevelStrategyConfig(strategy)) return false
+
+  const normalizedDefs = normalizeWidgetDefinitions(
+    watchWidgetDefs.value,
+    strategy.view_type || 'basic',
+    false
+  )
+  watchWidgetDefs.value = normalizedDefs
+
+  const currentConfig = strategy.config && typeof strategy.config === 'object'
+    ? { ...strategy.config }
+    : {}
+  currentConfig.widgets = normalizedDefs.map(item => serializeWidgetDef(item))
+
+  try {
+    const res = await ApiService.updateStrategyWatchStrategy(strategy.id, {
+      view_type: strategy.view_type || 'basic',
+      config: currentConfig
+    })
+    if (res?.data?.id) {
+      replaceStrategyLocal(res.data)
+    }
+    if (!silent) {
+      ElMessage.success('图表配置已保存')
+    }
+    return true
+  } catch (error) {
+    console.error(error)
+    if (!silent) {
+      ElMessage.error('保存图表配置失败')
+    }
+    return false
+  }
+}
+
+const queueSaveWatchWidgetConfig = () => {
+  if (watchPersistTimer.value) {
+    clearTimeout(watchPersistTimer.value)
+    watchPersistTimer.value = null
+  }
+  watchPersistTimer.value = setTimeout(() => {
+    saveWatchWidgetConfig({ silent: true })
+    watchPersistTimer.value = null
+  }, WATCH_LAYOUT_SAVE_DEBOUNCE_MS)
+}
+
+const stopWatchWidgetInteract = () => {
+  if (!watchPointerState.mode) return
+  const changedWidgetId = watchPointerState.widgetId
+  watchPointerState.mode = ''
+  watchPointerState.widgetId = ''
+  watchDraggingWidgetId.value = ''
+  watchResizingWidgetId.value = ''
+  document.removeEventListener('mousemove', onWatchWidgetInteractMove)
+  document.removeEventListener('mouseup', stopWatchWidgetInteract)
+  if (changedWidgetId) {
+    queueSaveWatchWidgetConfig()
+  }
+}
+
+const onWatchWidgetInteractMove = (event) => {
+  const widgetId = watchPointerState.widgetId
+  if (!watchPointerState.mode || !widgetId) return
+
+  const dx = event.clientX - watchPointerState.startX
+  const dy = event.clientY - watchPointerState.startY
+  const start = watchPointerState.startLayout || { x: 0, y: 0, w: 0, h: 0 }
+  const boardRect = watchBoardRef.value?.getBoundingClientRect()
+  const boardWidth = Math.max(0, Number(boardRect?.width || 0))
+
+  if (watchPointerState.mode === 'drag') {
+    const maxX = Math.max(0, boardWidth - start.w)
+    patchWatchWidgetLayout(widgetId, {
+      x: clampNumber(start.x + dx, 0, maxX),
+      y: Math.max(0, start.y + dy)
+    })
+    return
+  }
+
+  if (watchPointerState.mode === 'resize') {
+    const maxWidth = Math.max(WATCH_WIDGET_MIN_WIDTH, boardWidth - start.x)
+    patchWatchWidgetLayout(widgetId, {
+      w: clampNumber(start.w + dx, WATCH_WIDGET_MIN_WIDTH, maxWidth),
+      h: clampNumber(start.h + dy, WATCH_WIDGET_MIN_HEIGHT, 1800)
+    })
+  }
+}
+
+const startWatchWidgetDrag = (widget, event) => {
+  if (!watchLayoutEditMode.value || !widget?.id) return
+  if (event?.target?.closest && event.target.closest('button')) return
+  const layout = normalizeWidgetLayout(widget.layout, 0, widget.type || '')
+  watchPointerState.mode = 'drag'
+  watchPointerState.widgetId = widget.id
+  watchPointerState.startX = event.clientX
+  watchPointerState.startY = event.clientY
+  watchPointerState.startLayout = { ...layout }
+  watchDraggingWidgetId.value = widget.id
+  watchResizingWidgetId.value = ''
+  document.addEventListener('mousemove', onWatchWidgetInteractMove)
+  document.addEventListener('mouseup', stopWatchWidgetInteract)
+}
+
+const startWatchWidgetResize = (widget, event) => {
+  if (!watchLayoutEditMode.value || !widget?.id) return
+  const layout = normalizeWidgetLayout(widget.layout, 0, widget.type || '')
+  watchPointerState.mode = 'resize'
+  watchPointerState.widgetId = widget.id
+  watchPointerState.startX = event.clientX
+  watchPointerState.startY = event.clientY
+  watchPointerState.startLayout = { ...layout }
+  watchResizingWidgetId.value = widget.id
+  watchDraggingWidgetId.value = ''
+  document.addEventListener('mousemove', onWatchWidgetInteractMove)
+  document.addEventListener('mouseup', stopWatchWidgetInteract)
+}
+
+const removeWatchWidget = async (widgetId) => {
+  if (!watchLayoutEditMode.value || !widgetId) return
+  watchWidgetDefs.value = watchWidgetDefs.value.filter(item => item.id !== widgetId)
+  watchWidgets.value = watchWidgets.value.filter(item => item.id !== widgetId)
+  await saveWatchWidgetConfig({ silent: false })
+}
+
+const addWidgetFromToolTemplate = async (template) => {
+  const strategy = activeStrategy.value
+  if (!strategy?.id || !template?.id) return
+
+  const draft = ensureWidgetToolDraft(template)
+  const type = String(template.type || '').trim() || 'market_sentiment_chart'
+  const baseParams = normalizeWidgetParams(type, draft || {})
+  const title = String(draft?.title || '').trim() || buildWidgetTitle(type, baseParams)
+  const nextWidget = {
+    id: genWidgetId(),
+    type,
+    title,
+    params: baseParams,
+    layout: getNextWidgetLayout(type)
+  }
+
+  watchWidgetDefs.value = [...watchWidgetDefs.value, nextWidget]
+  await saveWatchWidgetConfig({ silent: false })
+  await loadWatchWidgets()
 }
 
 const loadWatchWidgets = async () => {
   const strategy = activeStrategy.value
   watchError.value = ''
   watchWidgets.value = []
-  if (!strategy || !activeMode.value || activeMode.value !== 'watch') return
+  watchWidgetDefs.value = []
+  if (!strategy || !activeMode.value || activeMode.value !== 'strategy_analysis') return
 
   if (isKeyLevelStrategyConfig(strategy)) {
+    watchLayoutEditMode.value = false
     watchLoading.value = false
     hydrateKeyBoardFromStrategy(strategy)
     if (keySelectedCode.value) {
@@ -2503,31 +3242,33 @@ const loadWatchWidgets = async () => {
   }
 
   const widgetDefs = buildWidgetsFromStrategy(strategy)
+  watchWidgetDefs.value = widgetDefs.map(item => ({
+    ...item,
+    params: { ...(item.params || {}) },
+    layout: { ...(item.layout || {}) }
+  }))
   if (!widgetDefs.length) return
 
   watchLoading.value = true
   try {
     const results = []
+    const sentimentCache = new Map()
     for (const widget of widgetDefs) {
-      if (widget.type === 'market_sentiment_bundle') {
-        const res = await ApiService.getMarketSentimentCharts(null, widget.params?.days_back || 30)
-        const charts = res.data?.charts || {}
-        const mapping = [
-          { key: 'red_ratio_and_amount', title: '红盘率与成交额' },
-          { key: 'limit_up_count', title: '涨停/跌停统计' },
-          { key: 'ground_ceiling_count', title: '地天板/天地板' },
-          { key: 'continuous_limit_up', title: '连板天梯' },
-          { key: 'change_distribution', title: '涨跌幅分布' }
-        ]
-        mapping.forEach(item => {
-          if (charts[item.key]) {
-            results.push({
-              id: `${widget.id}-${item.key}`,
-              title: item.title,
-              chartHtml: charts[item.key],
-              height: '420px'
-            })
-          }
+      if (widget.type === 'market_sentiment_chart') {
+        const daysBack = clampNumber(Number(widget.params?.days_back || 30) || 30, 10, 240)
+        const chartKey = String(widget.params?.chart_key || 'red_ratio_and_amount').trim() || 'red_ratio_and_amount'
+        let charts = sentimentCache.get(daysBack)
+        if (!charts) {
+          const res = await ApiService.getMarketSentimentCharts(null, daysBack)
+          charts = res.data?.charts || {}
+          sentimentCache.set(daysBack, charts)
+        }
+        const chartHtml = charts?.[chartKey] || ''
+        results.push({
+          ...widget,
+          title: widget.title || getSentimentChartTitle(chartKey),
+          chartHtml: chartHtml || '<div>暂无情绪图表</div>',
+          error: chartHtml ? '' : `未找到图表: ${chartKey}`
         })
         continue
       }
@@ -2536,33 +3277,63 @@ const loadWatchWidgets = async () => {
         const indexName = widget.params?.index_name || '上证指数'
         const daysRange = widget.params?.days_range || 60
         const res = await ApiService.getIndexKlineChart(indexName, daysRange)
-        const chartHtml = res.data?.chart_html || res.data?.[indexName]?.chart_html
+        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html || res?.data?.[indexName]?.chart_html
         results.push({
-          id: widget.id,
+          ...widget,
           title: widget.title || `${indexName} K线`,
           chartHtml: chartHtml || '<div>暂无指数图表</div>',
-          height: '520px'
+          error: chartHtml ? '' : '指数图表为空'
+        })
+        continue
+      }
+
+      if (widget.type === 'sector_kline') {
+        const sectorName = String(widget.params?.sector_name || '半导体').trim() || '半导体'
+        const daysRange = clampNumber(Number(widget.params?.days_range || 60) || 60, 20, 500)
+        const res = await ApiService.getSingleSectorKline(sectorName, {
+          days_range: daysRange,
+          format: 'chart'
+        })
+        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+        results.push({
+          ...widget,
+          title: widget.title || `${sectorName} K线`,
+          chartHtml: chartHtml || '<div>暂无板块图表</div>',
+          error: chartHtml ? '' : '板块图表为空'
+        })
+        continue
+      }
+
+      if (widget.type === 'stock_kline') {
+        const stockCode = normalizeStockWidgetCode(widget.params?.stock_code || '000001')
+        const days = clampNumber(Number(widget.params?.days || 120) || 120, 20, 500)
+        const res = await ApiService.getStockKline(stockCode, days, null, 'chart')
+        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+        results.push({
+          ...widget,
+          title: widget.title || `${stockCode} K线`,
+          chartHtml: chartHtml || '<div>暂无个股图表</div>',
+          error: chartHtml ? '' : '个股图表为空'
         })
         continue
       }
 
       if (widget.type === 'market_volume') {
         const res = await ApiService.getMarketVolume()
-        const chartHtml = res.data?.chart_html
+        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
         results.push({
-          id: widget.id,
+          ...widget,
           title: widget.title || '市场量能对比',
           chartHtml: chartHtml || '<div>暂无量能图表</div>',
-          height: '420px'
+          error: chartHtml ? '' : '量能图表为空'
         })
         continue
       }
 
       results.push({
-        id: widget.id,
+        ...widget,
         title: widget.title || '未识别图表',
         chartHtml: '<div>暂不支持该图表类型</div>',
-        height: '240px',
         error: widget.type ? `未支持的类型: ${widget.type}` : '未支持的图表类型'
       })
     }
@@ -2595,7 +3366,7 @@ const generateStrategyView = async () => {
 }
 
 const switchToChat = () => {
-  activeMode.value = 'chat'
+  activeMode.value = 'dialog'
 }
 
 const handleFileChange = (_file, fileList) => {
@@ -3034,6 +3805,139 @@ const downloadConversation = async () => {
   URL.revokeObjectURL(url)
 }
 
+const prettifyEventType = (eventType) => {
+  const text = String(eventType || '').trim()
+  if (!text) return '处理中'
+  return text.replace(/_/g, ' ')
+}
+
+const formatStrategyEditProgressTitle = (item) => {
+  const eventType = String(item?.event_type || '').trim()
+  const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {}
+  const agentName = String(payload.agent_name || '').trim()
+  const stageName = String(payload.stage_name || '').trim()
+  const taskId = String(payload.task_id || '').trim()
+  const taskTitle = String(payload.task_title || '').trim()
+  if (eventType === 'agent_tool_start') {
+    return `调用工具：${payload.tool_name || 'unknown'}${agentName ? `（${agentName}）` : ''}`
+  }
+  if (eventType === 'agent_tool_done') {
+    return `工具完成：${payload.tool_name || 'unknown'}${agentName ? `（${agentName}）` : ''}`
+  }
+  if (eventType === 'agent_invoke_start') return '开始推理'
+  if (eventType === 'agent_invoke_done') return '推理完成'
+  if (eventType === 'agent_request_start') return '发起模型请求'
+  if (eventType === 'agent_tools_bound') return '已绑定工具'
+  if (eventType === 'orchestration_stage_start') {
+    const suffix = [agentName, stageName, taskId].filter(Boolean).join(' · ')
+    return `子代理启动${suffix ? `：${suffix}` : ''}`
+  }
+  if (eventType === 'orchestration_stage_done') {
+    const suffix = [agentName, stageName, taskId].filter(Boolean).join(' · ')
+    return `子代理完成${suffix ? `：${suffix}` : ''}`
+  }
+  if (eventType === 'orchestration_stage_error') {
+    const suffix = [agentName, stageName, taskId].filter(Boolean).join(' · ')
+    return `子代理异常${suffix ? `：${suffix}` : ''}`
+  }
+  if (eventType === 'task_execution_start') {
+    const suffix = [agentName, taskId, taskTitle].filter(Boolean).join(' · ')
+    return `执行任务${suffix ? `：${suffix}` : ''}`
+  }
+  if (eventType === 'task_execution_done') {
+    const suffix = [agentName, taskId, taskTitle].filter(Boolean).join(' · ')
+    return `任务完成${suffix ? `：${suffix}` : ''}`
+  }
+  if (eventType === 'conversation_agent_done') return '结果生成完成'
+  return `进度：${prettifyEventType(eventType)}`
+}
+
+const appendStrategyEditProgress = (title, key = '') => {
+  const text = String(title || '').trim()
+  if (!text || !strategyEditRun.value.active) return
+  const dedupeKey = key || text
+  if (strategyEditRun.value.seenKeys?.[dedupeKey]) return
+  strategyEditRun.value.seenKeys = {
+    ...(strategyEditRun.value.seenKeys || {}),
+    [dedupeKey]: true
+  }
+  strategyEditRun.value.steps = [...(strategyEditRun.value.steps || []), text]
+}
+
+const stopStrategyEditRunPoll = () => {
+  if (strategyEditRunPollTimer.value) {
+    clearInterval(strategyEditRunPollTimer.value)
+    strategyEditRunPollTimer.value = null
+  }
+}
+
+const stopStrategyEditRun = () => {
+  stopStrategyEditRunPoll()
+  strategyEditRun.value = {
+    active: false,
+    question: '',
+    conversationId: '',
+    assistantMessageId: '',
+    startedAt: '',
+    bucket: '',
+    steps: [],
+    seenKeys: {}
+  }
+}
+
+const pollStrategyEditRunProgress = async () => {
+  if (!strategyEditRun.value.active) return
+  try {
+    const params = {
+      limit: 120
+    }
+    const bucket = strategyEditRun.value.bucket || activeConversationTitle.value
+    if (bucket) params.bucket = bucket
+    const res = await ApiService.getStrategyAgentLogs(params)
+    const rows = Array.isArray(res?.data) ? [...res.data].reverse() : []
+    rows.forEach(item => {
+      const payload = item?.payload && typeof item.payload === 'object' ? item.payload : {}
+      const itemConvId = String(payload.conversation_id || '').trim()
+      if (strategyEditRun.value.conversationId && itemConvId && itemConvId !== strategyEditRun.value.conversationId) return
+      const key = `${item?.timestamp || ''}|${item?.event_type || ''}|${payload.tool_name || ''}`
+      appendStrategyEditProgress(formatStrategyEditProgressTitle(item), key)
+    })
+    if (strategyEditRun.value.steps?.length) {
+      scrollMessagesToBottom()
+    }
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const startStrategyEditRun = (questionText) => {
+  stopStrategyEditRun()
+  strategyEditRun.value = {
+    active: true,
+    question: String(questionText || '').trim(),
+    conversationId: activeConversationId.value || '',
+    assistantMessageId: '',
+    startedAt: new Date().toISOString(),
+    bucket: activeConversationTitle.value || '',
+    steps: ['策略编辑师已接收问题', '正在调用工具...'],
+    seenKeys: {
+      init_accepted: true,
+      init_running: true
+    }
+  }
+  pollStrategyEditRunProgress()
+  strategyEditRunPollTimer.value = setInterval(pollStrategyEditRunProgress, 1200)
+}
+
+const shouldHideAssistantMessage = (msg) => {
+  if (!msg || msg.role !== 'assistant') return false
+  if (!strategyEditRun.value.active) return false
+  if (String(activeMode.value || '') !== 'strategy_edit') return false
+  const runAssistantId = String(strategyEditRun.value.assistantMessageId || '').trim()
+  if (!runAssistantId || runAssistantId !== String(msg.id || '').trim()) return false
+  return !String(msg.content || '').trim()
+}
+
 const sendMessage = async () => {
   const text = (inputText.value || '').trim()
   if (!text) {
@@ -3041,10 +3945,12 @@ const sendMessage = async () => {
     return
   }
   if (!activeConversationId.value) await createConversation()
+  const isStrategyEditMode = activeMode.value === 'strategy_edit'
 
   const payload = {
     content: text,
     resource_ids: selectedResourceIds.value,
+    conversation_mode: activeMode.value,
     agent_name: selectedAgentName.value,
     model: selectedModel.value,
     strategy_id: activeStrategyId.value || '',
@@ -3056,30 +3962,51 @@ const sendMessage = async () => {
   sending.value = true
   try {
     inputText.value = ''
+    if (isStrategyEditMode) {
+      startStrategyEditRun(text)
+    }
     let assistantRef = null
     await ApiService.streamStrategyMessage(activeConversationId.value, payload, {
       onMeta: (evt) => {
+        if (isStrategyEditMode) {
+          strategyEditRun.value.conversationId = String(evt?.conversation_id || strategyEditRun.value.conversationId || '')
+          strategyEditRun.value.bucket = activeConversationTitle.value || strategyEditRun.value.bucket || ''
+        }
         const userMessage = evt.user_message
         const assistantMessage = evt.assistant_message
         if (userMessage) messages.value.push(userMessage)
         if (assistantMessage) {
           messages.value.push(assistantMessage)
           assistantRef = messages.value[messages.value.length - 1]
+          if (isStrategyEditMode) {
+            strategyEditRun.value.assistantMessageId = String(assistantMessage.id || '')
+          }
         }
         scrollMessagesToBottom()
       },
       onDelta: (evt) => {
         if (!assistantRef) return
         const textChunk = evt.text || ''
-        if (textChunk) assistantRef.content = (assistantRef.content || '') + textChunk
+        if (textChunk) {
+          assistantRef.content = (assistantRef.content || '') + textChunk
+          if (isStrategyEditMode) {
+            stopStrategyEditRun()
+          }
+        }
         scrollMessagesToBottom()
       },
       onDone: async () => {
+        if (isStrategyEditMode) {
+          stopStrategyEditRun()
+        }
         await loadConversations()
         await loadResources()
         await scrollMessagesToBottom()
       },
       onError: (err) => {
+        if (isStrategyEditMode) {
+          stopStrategyEditRun()
+        }
         const message = typeof err === 'string' ? err : (err?.message || err?.error || '')
         if (assistantRef) {
           const suffix = message ? `\n\n${message}` : '\n\n流式输出失败'
@@ -3091,6 +4018,9 @@ const sendMessage = async () => {
     })
   } catch (error) {
     console.error(error)
+    if (isStrategyEditMode) {
+      stopStrategyEditRun()
+    }
   } finally {
     sending.value = false
   }
@@ -3117,6 +4047,12 @@ onBeforeUnmount(() => {
   memoryManageVisible.value = false
   stopJobPolling()
   stopKeyPaneResize()
+  stopWatchWidgetInteract()
+  stopStrategyEditRun()
+  if (watchPersistTimer.value) {
+    clearTimeout(watchPersistTimer.value)
+    watchPersistTimer.value = null
+  }
 })
 
 watch(promptTemplates, () => {
@@ -3127,9 +4063,23 @@ watch(promptTemplates, () => {
 }, { deep: true })
 
 watch([activeStrategyId, activeMode], () => {
-  if (activeMode.value !== 'chat') groupPopoverVisible.value = false
-  if (activeMode.value !== 'chat') promptTemplatePopoverVisible.value = false
+  syncAgentByMode()
+  if (!isReplayChatMode.value) groupPopoverVisible.value = false
+  if (!isReplayChatMode.value) promptTemplatePopoverVisible.value = false
+  if (activeMode.value !== 'strategy_edit') {
+    stopStrategyEditRun()
+  }
+  if (activeMode.value !== 'strategy_analysis') {
+    watchLayoutEditMode.value = false
+    stopWatchWidgetInteract()
+  }
   loadWatchWidgets()
+})
+
+watch(watchLayoutEditMode, (nextVal) => {
+  if (!nextVal) {
+    stopWatchWidgetInteract()
+  }
 })
 
 watch(memoryManageProfileId, async (nextId) => {
@@ -3152,6 +4102,12 @@ watch(selectedModel, (nextVal) => {
   if (!selectedPortraitModel.value) {
     selectedPortraitModel.value = nextVal || ''
   }
+})
+
+watch(selectedAgentName, (nextVal) => {
+  const mode = activeMode.value
+  if (!mode || !nextVal) return
+  modeAgentSelection.value[mode] = nextVal
 })
 
 watch(activeMemoryProfileId, async (nextId, prevId) => {
@@ -3198,10 +4154,21 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.mode-switch {
+  display: flex;
+  flex-wrap: wrap;
 }
 
 .mode-switch :deep(.el-radio-button__inner) {
   padding: 8px 16px;
+}
+
+.runtime-tag {
+  white-space: nowrap;
 }
 
 .page-body {
@@ -3644,6 +4611,59 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   opacity: 0.7;
 }
 
+.strategy-edit-run-bubble {
+  min-width: 360px;
+  max-width: 780px;
+  background: #f7fbff !important;
+  border-color: #cfe2f3 !important;
+}
+
+.strategy-edit-run-question {
+  font-size: 13px;
+  color: #2f3e52;
+  margin-bottom: 8px;
+}
+
+.strategy-edit-run-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #1f6f98;
+  margin-bottom: 6px;
+}
+
+.strategy-edit-run-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #b8d2e6;
+  border-top-color: #2f8cb7;
+  border-radius: 50%;
+  animation: strategy-edit-spin 0.9s linear infinite;
+  flex-shrink: 0;
+}
+
+.strategy-edit-run-title {
+  font-weight: 600;
+}
+
+.strategy-edit-run-steps {
+  font-size: 12px;
+  color: #62768b;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+@keyframes strategy-edit-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .copy-tag {
   margin-top: 4px;
   padding: 4px 10px;
@@ -3823,7 +4843,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   gap: 16px;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .watch-placeholder {
@@ -3845,10 +4865,28 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   line-height: 1.6;
 }
 
-.watch-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-  gap: 14px;
+.watch-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.watch-layout-board {
+  position: relative;
+  border: 1px solid #e5e9f0;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #f7fbff 0%, #fdfefe 100%);
+  overflow: auto;
+  min-height: 360px;
+}
+
+.watch-layout-board.editing {
+  background-image:
+    linear-gradient(to right, rgba(47, 140, 183, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(47, 140, 183, 0.08) 1px, transparent 1px);
+  background-size: 16px 16px;
 }
 
 .key-board {
@@ -4014,19 +5052,54 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 }
 
 .watch-widget {
+  position: absolute;
   background: #fff;
   border: 1px solid #e5e9f0;
   border-radius: 12px;
-  padding: 10px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(19, 55, 82, 0.08);
+}
+
+.watch-widget.editable {
+  user-select: none;
+}
+
+.watch-widget.moving,
+.watch-widget.resizing {
+  border-color: #2f8cb7;
+  box-shadow: 0 10px 28px rgba(31, 122, 162, 0.22);
+  z-index: 20;
 }
 
 .widget-header {
+  padding: 10px 12px;
   font-size: 13px;
   font-weight: 600;
   color: #2a3f55;
+  border-bottom: 1px solid #e8edf4;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  background: #f9fcff;
+}
+
+.widget-header.draggable {
+  cursor: move;
+}
+
+.widget-header-actions {
+  display: flex;
+  align-items: center;
+}
+
+.watch-widget-body {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+  overflow: hidden;
 }
 
 .widget-error {
@@ -4035,6 +5108,95 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   background: #fdecec;
   border-radius: 8px;
   padding: 8px;
+}
+
+.widget-resize-handle {
+  position: absolute;
+  right: 1px;
+  bottom: 1px;
+  width: 14px;
+  height: 14px;
+  cursor: nwse-resize;
+  border-right: 2px solid #6fa6c0;
+  border-bottom: 2px solid #6fa6c0;
+  border-bottom-right-radius: 8px;
+}
+
+.widget-tool-layout {
+  min-height: 480px;
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 12px;
+}
+
+.widget-tool-sidebar {
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  padding: 8px;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.widget-tool-category {
+  border: 1px solid #dce6f1;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 13px;
+  color: #33485e;
+  cursor: pointer;
+  user-select: none;
+}
+
+.widget-tool-category:hover {
+  border-color: #2f8cb7;
+  color: #1f7aa2;
+}
+
+.widget-tool-category.active {
+  background: #eaf6ff;
+  border-color: #2f8cb7;
+  color: #1f7aa2;
+  font-weight: 600;
+}
+
+.widget-tool-main {
+  border: 1px solid #e8edf4;
+  border-radius: 10px;
+  padding: 10px 12px;
+  background: #fff;
+  min-height: 0;
+  overflow: auto;
+}
+
+.widget-tool-main-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2a3f55;
+  margin-bottom: 8px;
+}
+
+.widget-tool-collapse :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  color: #2a3f55;
+}
+
+.widget-tool-item-desc {
+  font-size: 12px;
+  color: #6f7f90;
+  margin-bottom: 8px;
+}
+
+.widget-tool-item-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.widget-tool-item-actions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .manage-toolbar {
@@ -4203,6 +5365,11 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 }
 
 @media (max-width: 1180px) {
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
   .page-body {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
@@ -4219,7 +5386,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
   .header-actions {
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
 
   .manage-body {
@@ -4257,6 +5424,15 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
   .key-chart-panel {
     min-width: 0;
+  }
+
+  .widget-tool-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .widget-tool-sidebar {
+    flex-direction: row;
+    overflow-x: auto;
   }
 }
 

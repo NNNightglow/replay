@@ -1,5 +1,5 @@
 ﻿# 技能接口元数据
 interface:
   display_name: "数据缓存检查器"
-  short_description: "检查 data_cache 中的市场数据缓存并汇总可用性。"
-  default_prompt: "使用 $data-cache-inspector 安全定位并预览缓存市场数据，输出可用性摘要。"
+  short_description: "查询并分析 data_cache 中的市场数据，支持按条件读取实际数据与对比计算。"
+  default_prompt: "使用 $data-cache-inspector 先确认数据可用性，再调用查询工具读取实际数据，输出具体数值、对比结果和依据。"

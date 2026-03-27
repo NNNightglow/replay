@@ -24,6 +24,12 @@ if requests_obj is not None:
         "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
         "Connection": "keep-alive"
     })
+    try:
+        # Prefer direct connection for AkShare requests to avoid broken system proxy chains.
+        requests_obj.trust_env = False
+        requests_obj.proxies = {}
+    except Exception:
+        pass
 
 class IndexMetadataManager:
     """指数元数据管理器(支持日线与分钟数据)。"""
@@ -37,6 +43,7 @@ class IndexMetadataManager:
         
         self.minute_metadata_path = Path("data_cache/indices/index_minute_metadata.parquet")
         self._bs_logged_in = False
+        self._skip_akshare_index_fetch = False
 
         print("指数元数据管理器初始化完成")
     
@@ -190,7 +197,28 @@ class IndexMetadataManager:
         extras = [c for c in df.columns if c not in base]
         return df.select(base + extras)
 
-    def update_metadata(self,  start_date=None, end_date=None, progress_callback=None, fill_gaps: bool = True) -> bool:
+    @staticmethod
+    def _align_frames_for_concat(frames: List[pl.DataFrame]) -> List[pl.DataFrame]:
+        """Align column sets/order across frames to avoid concat schema mismatch."""
+        valid_frames = [frame for frame in frames if frame is not None and not frame.is_empty()]
+        if not valid_frames:
+            return []
+
+        all_columns: List[str] = []
+        for frame in valid_frames:
+            for col in frame.columns:
+                if col not in all_columns:
+                    all_columns.append(col)
+
+        aligned: List[pl.DataFrame] = []
+        for frame in valid_frames:
+            missing_cols = [col for col in all_columns if col not in frame.columns]
+            if missing_cols:
+                frame = frame.with_columns([pl.lit(None).alias(col) for col in missing_cols])
+            aligned.append(frame.select(all_columns))
+        return aligned
+
+    def update_metadata(self,  start_date=None, end_date=None, progress_callback=None, fill_gaps: bool = False) -> bool:
         """更新指数元数据,并可选填补缺失交易日。"""
         date_col = "日期"
         code_col = "代码"
@@ -218,11 +246,15 @@ class IndexMetadataManager:
             ]
 
             existing_metadata = self._normalize_existing_metadata_schema(self.load_metadata())
+            gap_checked = False
+            gap_missing_count = 0
+            gap_filled_rows = 0
 
             if fill_gaps and existing_metadata is not None and not existing_metadata.is_empty():
                 try:
                     from utils.trading_calendar import trading_calendar
                     if date_col in existing_metadata.columns and code_col in existing_metadata.columns:
+                        gap_checked = True
                         index_date_ranges = existing_metadata.group_by(code_col).agg([
                             pl.col(date_col).min().alias("min_date"),
                             pl.col(date_col).max().alias("max_date"),
@@ -238,6 +270,10 @@ class IndexMetadataManager:
                                 code_value = str(row[code_col]).zfill(6)
                                 code_to_name[code_value] = row[name_col]
 
+                        # 扫描窗口从 2015-01-01 起，但不会早于该指数当前最早可见记录，
+                        # 并将终点扩展到“今天”，从而识别尾部连续缺失。
+                        gap_window_anchor = date(2015, 1, 1)
+                        gap_window_end = datetime.now().date()
                         missing_by_code = {}
                         for row in index_date_ranges.iter_rows(named=True):
                             code_value = str(row[code_col]).zfill(6)
@@ -245,34 +281,53 @@ class IndexMetadataManager:
                             max_date = row["max_date"]
                             if min_date is None or max_date is None:
                                 continue
-                            for trading_day in trading_calendar.get_trading_days_in_range(min_date, max_date):
+                            if isinstance(min_date, datetime):
+                                min_date = min_date.date()
+                            if isinstance(max_date, datetime):
+                                max_date = max_date.date()
+                            scan_start = max(gap_window_anchor, min_date)
+                            scan_end = max(max_date, gap_window_end)
+                            for trading_day in trading_calendar.get_trading_days_in_range(scan_start, scan_end):
                                 if (trading_day, code_value) not in existing_pair_set:
                                     missing_by_code.setdefault(code_value, []).append(trading_day)
 
                         if missing_by_code:
-                            range_to_codes = {}
-                            for code_value, dates in missing_by_code.items():
-                                if dates:
-                                    range_to_codes.setdefault((min(dates), max(dates)), []).append(code_value)
-
+                            gap_missing_count = sum(len(v) for v in missing_by_code.values())
                             gap_filled_data = []
-                            for (min_date, max_date), code_list in range_to_codes.items():
-                                start_str = self._to_dash_date(min_date)
-                                end_str = self._to_dash_date(max_date)
-                                targets = [{"code": c, "name": code_to_name.get(c, c)} for c in code_list]
+                            for code_value, dates in missing_by_code.items():
+                                if not dates:
+                                    continue
+                                start_str = self._to_dash_date(min(dates))
+                                end_str = self._to_dash_date(max(dates))
+                                targets = [{"code": code_value, "name": code_to_name.get(code_value, code_value)}]
                                 filled = self._fill_missing_index_data_for_date_range(start_str, end_str, targets)
                                 if filled is not None and not filled.is_empty():
                                     gap_filled_data.append(filled)
 
                             if gap_filled_data:
-                                gap_filled_combined = pl.concat(gap_filled_data, how="vertical_relaxed").unique(
-                                    subset=[date_col, code_col], keep="last"
-                                )
-                                existing_metadata = pl.concat(
-                                    [existing_metadata, gap_filled_combined], how="vertical_relaxed"
-                                ).unique(subset=[date_col, code_col], keep="last")
-                                existing_metadata = self._calculate_index_ma(existing_metadata.sort([code_col, date_col]))
-                                existing_metadata.write_parquet(self.metadata_path)
+                                normalized_gap_frames = [
+                                    self._normalize_existing_metadata_schema(frame)
+                                    for frame in gap_filled_data
+                                    if frame is not None and not frame.is_empty()
+                                ]
+                                normalized_gap_frames = [
+                                    frame for frame in normalized_gap_frames if frame is not None and not frame.is_empty()
+                                ]
+                                aligned_gap_frames = self._align_frames_for_concat(normalized_gap_frames)
+                                if aligned_gap_frames:
+                                    gap_filled_combined = pl.concat(aligned_gap_frames, how="vertical_relaxed").unique(
+                                        subset=[date_col, code_col], keep="last"
+                                    )
+                                    gap_filled_rows = gap_filled_combined.height
+                                    aligned_existing_frames = self._align_frames_for_concat(
+                                        [existing_metadata, gap_filled_combined]
+                                    )
+                                    if aligned_existing_frames:
+                                        existing_metadata = pl.concat(
+                                            aligned_existing_frames, how="vertical_relaxed"
+                                        ).unique(subset=[date_col, code_col], keep="last")
+                                    existing_metadata = self._calculate_index_ma(existing_metadata.sort([code_col, date_col]))
+                                    existing_metadata.write_parquet(self.metadata_path)
                 except Exception as gap_error:
                     print(f"[] {gap_error}")
 
@@ -296,22 +351,55 @@ class IndexMetadataManager:
                     start_date = start_date.replace("-", "")
             if isinstance(end_date, str) and len(end_date) == 10 and "-" in end_date:
                 end_date = end_date.replace("-", "")
-            all_index_data = []
+            should_fetch_increment = True
+            try:
+                start_dt = datetime.strptime(str(start_date), "%Y%m%d")
+                end_dt = datetime.strptime(str(end_date), "%Y%m%d")
+                if start_dt > end_dt:
+                    should_fetch_increment = False
+                    print(f"[] increment skipped because start_date > end_date: {start_date} > {end_date}")
+            except Exception as date_error:
+                print(f"[] date normalize failed: {date_error}")
 
-            for i, index_info in enumerate(index_list):
-                try:
-                    if progress_callback:
-                        progress_callback(10 + int(80 * i / len(index_list)), 100, f" {index_info['name']}{i+1}/{len(index_list)}")
-                    df_pl = self._fetch_index_with_fallback(index_info, start_date, end_date)
-                    if df_pl is not None and not df_pl.is_empty():
-                        all_index_data.append(df_pl)
-                except Exception as e:
-                    print(f"{index_info['name']}{e}")
+            all_index_data = []
+            if should_fetch_increment:
+                self._skip_akshare_index_fetch = False
+                for i, index_info in enumerate(index_list):
+                    try:
+                        if progress_callback:
+                            progress_callback(10 + int(80 * i / len(index_list)), 100, f" {index_info['name']}{i+1}/{len(index_list)}")
+                        df_pl = self._fetch_index_with_fallback(index_info, start_date, end_date)
+                        if df_pl is not None and not df_pl.is_empty():
+                            all_index_data.append(df_pl)
+                    except Exception as e:
+                        print(f"{index_info['name']}{e}")
 
             if not all_index_data:
+                has_existing_data = existing_metadata is not None and not existing_metadata.is_empty()
+                if has_existing_data:
+                    if progress_callback:
+                        if gap_checked:
+                            progress_callback(
+                                100,
+                                100,
+                                f"指数元数据已是最新，已检查缺口: missing={gap_missing_count}, filled={gap_filled_rows}"
+                            )
+                        else:
+                            progress_callback(100, 100, "指数元数据已是最新")
+                    return True
                 return False
 
-            new_index_data = self._calculate_index_ma(pl.concat(all_index_data, how="vertical_relaxed"))
+            normalized_new_frames = [
+                self._normalize_existing_metadata_schema(frame)
+                for frame in all_index_data
+                if frame is not None and not frame.is_empty()
+            ]
+            normalized_new_frames = [frame for frame in normalized_new_frames if frame is not None and not frame.is_empty()]
+            aligned_new_frames = self._align_frames_for_concat(normalized_new_frames)
+            if not aligned_new_frames:
+                return existing_metadata is not None and not existing_metadata.is_empty()
+
+            new_index_data = self._calculate_index_ma(pl.concat(aligned_new_frames, how="vertical_relaxed"))
             if existing_metadata is not None and not existing_metadata.is_empty():
                 ma_cols = ["MA5", "MA10", "MA20", pct5_col, pct10_col, pct20_col]
                 missing_ma_cols = [col for col in ma_cols if col not in existing_metadata.columns]
@@ -395,20 +483,25 @@ class IndexMetadataManager:
         except Exception as fetch_error:
             print(f"[] =baostock  {index_info['name']} {fetch_error}")
 
-        try:
-            df = ak.index_zh_a_hist(
-                symbol=index_info['code'],
-                period="daily",
-                start_date=start_date,
-                end_date=end_date,
-            )
-            if df is not None and not df.empty:
-                standardized = self._standardize_index_dataframe(df, index_info)
-                if standardized is not None and not standardized.is_empty():
-                    print(f"[] =ak.index_zh_a_hist  {index_info['name']} ")
-                    return standardized
-        except Exception as fetch_error:
-            print(f"[] =ak.index_zh_a_hist  {index_info['name']} {fetch_error}")
+        if not getattr(self, "_skip_akshare_index_fetch", False):
+            try:
+                df = ak.index_zh_a_hist(
+                    symbol=index_info['code'],
+                    period="daily",
+                    start_date=start_date,
+                    end_date=end_date,
+                )
+                if df is not None and not df.empty:
+                    standardized = self._standardize_index_dataframe(df, index_info)
+                    if standardized is not None and not standardized.is_empty():
+                        print(f"[] =ak.index_zh_a_hist  {index_info['name']} ")
+                        return standardized
+            except Exception as fetch_error:
+                err_text = str(fetch_error)
+                if ("ProxyError" in err_text) or ("Unable to connect to proxy" in err_text):
+                    self._skip_akshare_index_fetch = True
+                    print("[] ak.index_zh_a_hist proxy unavailable, skip AK fallback for remaining indices in this round")
+                print(f"[] =ak.index_zh_a_hist  {index_info['name']} {fetch_error}")
 
         return None
 
