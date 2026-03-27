@@ -574,61 +574,96 @@
               <div class="placeholder-title">图表加载失败</div>
               <div class="placeholder-desc">{{ watchError }}</div>
             </div>
-            <div v-else class="watch-layout">
-              <div
-                ref="watchBoardRef"
-                class="watch-layout-board"
-                :class="{ editing: watchLayoutEditMode }"
-                :style="watchBoardStyle"
-              >
+            <div v-else class="watch-layout-shell" :class="{ 'tool-open': widgetEditorVisible }">
+              <aside v-if="widgetEditorVisible" class="watch-widget-tool-panel">
+                <div class="watch-widget-tool-head">
+                  <span>图表组件库</span>
+                  <el-button link @click="widgetEditorVisible = false">收起</el-button>
+                </div>
+                <el-collapse v-model="widgetToolExpandedCategoryIds" class="watch-widget-tool-collapse">
+                  <el-collapse-item
+                    v-for="category in widgetToolCategories"
+                    :key="`tool-panel-${category.id}`"
+                    :name="category.id"
+                    :title="category.label"
+                  >
+                    <div class="watch-widget-tool-list">
+                      <button
+                        v-for="tpl in (category.templates || [])"
+                        :key="`tool-item-${tpl.id}`"
+                        type="button"
+                        class="watch-widget-tool-item"
+                        draggable="true"
+                        @dragstart="onWidgetToolTemplateDragStart(tpl, $event)"
+                        @dragend="onWidgetToolTemplateDragEnd"
+                        @click="addWidgetFromToolTemplate(tpl)"
+                      >
+                        {{ tpl.title }}
+                      </button>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
+                <div class="watch-widget-tool-hint">点击快速添加，或拖动到右侧布局区域。</div>
+              </aside>
+
+              <div class="watch-layout">
                 <div
-                  v-for="widget in watchWidgets"
-                  :key="widget.id"
-                  class="watch-widget"
-                  :class="{
-                    editable: watchLayoutEditMode,
-                    moving: watchDraggingWidgetId === widget.id,
-                    resizing: watchResizingWidgetId === widget.id
-                  }"
-                  :style="watchWidgetStyle(widget)"
+                  ref="watchBoardRef"
+                  class="watch-layout-board"
+                  :class="{ editing: watchLayoutEditMode, 'palette-dragging': widgetPaletteDragging }"
+                  :style="watchBoardStyle"
+                  @dragover.prevent="onWatchBoardDragOver"
+                  @drop.prevent="onWatchBoardDrop"
                 >
                   <div
-                    class="widget-header"
-                    :class="{ draggable: watchLayoutEditMode }"
-                    @mousedown.stop.prevent="startWatchWidgetDrag(widget, $event)"
+                    v-for="widget in watchWidgets"
+                    :key="widget.id"
+                    class="watch-widget"
+                    :class="{
+                      editable: watchLayoutEditMode,
+                      moving: watchDraggingWidgetId === widget.id,
+                      resizing: watchResizingWidgetId === widget.id
+                    }"
+                    :style="watchWidgetStyle(widget)"
                   >
-                    <span>{{ widget.title }}</span>
-                    <div class="widget-header-actions">
-                      <el-button
-                        v-if="watchLayoutEditMode"
-                        type="danger"
-                        link
-                        @click.stop="removeWatchWidget(widget.id)"
-                      >
-                        删除
-                      </el-button>
+                    <div
+                      class="widget-header"
+                      :class="{ draggable: watchLayoutEditMode }"
+                      @mousedown.stop.prevent="startWatchWidgetDrag(widget, $event)"
+                    >
+                      <span>{{ widget.title }}</span>
+                      <div class="widget-header-actions">
+                        <el-button
+                          v-if="watchLayoutEditMode"
+                          type="danger"
+                          link
+                          @click.stop="removeWatchWidget(widget.id)"
+                        >
+                          删除
+                        </el-button>
+                      </div>
                     </div>
+                    <div class="watch-widget-body">
+                      <div v-if="widget.error" class="widget-error">{{ widget.error }}</div>
+                      <EChartsRenderer
+                        v-else
+                        :chart-html="widget.chartHtml"
+                        :height="getWidgetChartHeight(widget)"
+                      />
+                    </div>
+                    <div
+                      v-if="watchLayoutEditMode"
+                      class="widget-resize-handle"
+                      @mousedown.stop.prevent="startWatchWidgetResize(widget, $event)"
+                    ></div>
                   </div>
-                  <div class="watch-widget-body">
-                    <div v-if="widget.error" class="widget-error">{{ widget.error }}</div>
-                    <EChartsRenderer
-                      v-else
-                      :chart-html="widget.chartHtml"
-                      :height="getWidgetChartHeight(widget)"
-                    />
-                  </div>
-                  <div
-                    v-if="watchLayoutEditMode"
-                    class="widget-resize-handle"
-                    @mousedown.stop.prevent="startWatchWidgetResize(widget, $event)"
-                  ></div>
                 </div>
+                <el-empty
+                  v-if="!watchWidgets.length && !watchLoading"
+                  description="暂无图表配置，可通过“新增图表”或 Agent 生成视图补充"
+                  :image-size="90"
+                />
               </div>
-              <el-empty
-                v-if="!watchWidgets.length && !watchLoading"
-                description="暂无图表配置，可通过“新增图表”或 Agent 生成视图补充"
-                :image-size="90"
-              />
             </div>
           </div>
           <el-empty v-else description="请选择左侧策略进入看盘" :image-size="90" />
@@ -802,86 +837,6 @@
       <template #footer>
         <el-button @click="groupTransferVisible = false">取消</el-button>
         <el-button type="primary" @click="submitGroupTransfer">确认</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="widgetEditorVisible" title="新增看盘图表" width="980px">
-      <div class="widget-tool-layout">
-        <aside class="widget-tool-sidebar">
-          <div
-            v-for="category in widgetToolCategories"
-            :key="`tool-cat-${category.id}`"
-            class="widget-tool-category"
-            :class="{ active: category.id === widgetToolActiveCategoryId }"
-            @click="switchWidgetToolCategory(category.id)"
-          >
-            {{ category.label }}
-          </div>
-        </aside>
-        <section class="widget-tool-main">
-          <div class="widget-tool-main-title">{{ activeWidgetToolCategory?.label || '图表' }}</div>
-          <el-collapse v-model="widgetToolExpandedTemplateIds" class="widget-tool-collapse">
-            <el-collapse-item
-              v-for="tpl in activeWidgetToolTemplates"
-              :key="`tpl-${tpl.id}`"
-              :name="tpl.id"
-              :title="tpl.title"
-            >
-              <div class="widget-tool-item-desc">{{ tpl.desc || '按需配置参数后新增到看盘界面。' }}</div>
-              <div class="widget-tool-item-form">
-                <el-form label-width="96px" size="small">
-                  <el-form-item label="图表标题">
-                    <el-input
-                      :model-value="getWidgetToolDraftValue(tpl.id, 'title')"
-                      @update:model-value="setWidgetToolDraftValue(tpl.id, 'title', $event)"
-                      maxlength="40"
-                      show-word-limit
-                    />
-                  </el-form-item>
-                  <template v-for="field in (tpl.fields || [])" :key="`field-${tpl.id}-${field.key}`">
-                    <el-form-item :label="field.label">
-                      <el-input
-                        v-if="field.type === 'text'"
-                        :model-value="getWidgetToolDraftValue(tpl.id, field.key)"
-                        :placeholder="field.placeholder || ''"
-                        @update:model-value="setWidgetToolDraftValue(tpl.id, field.key, $event)"
-                      />
-                      <el-input-number
-                        v-else-if="field.type === 'number'"
-                        :model-value="getWidgetToolDraftValue(tpl.id, field.key)"
-                        :min="field.min ?? 0"
-                        :max="field.max ?? 10000"
-                        :step="field.step ?? 1"
-                        style="width: 220px"
-                        @update:model-value="setWidgetToolDraftValue(tpl.id, field.key, $event)"
-                      />
-                      <el-select
-                        v-else-if="field.type === 'select'"
-                        :model-value="getWidgetToolDraftValue(tpl.id, field.key)"
-                        style="width: 260px"
-                        @update:model-value="setWidgetToolDraftValue(tpl.id, field.key, $event)"
-                      >
-                        <el-option
-                          v-for="opt in (field.options || [])"
-                          :key="`opt-${tpl.id}-${field.key}-${opt.value}`"
-                          :label="opt.label"
-                          :value="opt.value"
-                        />
-                      </el-select>
-                    </el-form-item>
-                  </template>
-                </el-form>
-                <div class="widget-tool-item-actions">
-                  <el-button type="primary" size="small" @click="addWidgetFromToolTemplate(tpl)">新增此图表</el-button>
-                </div>
-              </div>
-            </el-collapse-item>
-          </el-collapse>
-        </section>
-      </div>
-      <template #footer>
-        <el-button @click="widgetEditorVisible = false">取消</el-button>
-        <el-button type="primary" @click="widgetEditorVisible = false">完成</el-button>
       </template>
     </el-dialog>
 
@@ -1385,9 +1340,9 @@ const watchDraggingWidgetId = ref('')
 const watchResizingWidgetId = ref('')
 const watchPersistTimer = ref(null)
 const widgetEditorVisible = ref(false)
-const widgetToolActiveCategoryId = ref(widgetToolCategories[0]?.id || '')
-const widgetToolExpandedTemplateIds = ref([])
-const widgetToolDrafts = ref({})
+const widgetToolExpandedCategoryIds = ref([])
+const widgetPaletteDragging = ref(false)
+const widgetPaletteDragTemplateId = ref('')
 
 const keyWatchlist = ref([])
 const keySelectedCode = ref('')
@@ -1529,10 +1484,6 @@ const strategyEditRunRecentSteps = computed(() => {
   if (steps.length <= 4) return steps
   return steps.slice(steps.length - 4)
 })
-const activeWidgetToolCategory = computed(() => {
-  return widgetToolCategories.find(item => item.id === widgetToolActiveCategoryId.value) || widgetToolCategories[0] || null
-})
-const activeWidgetToolTemplates = computed(() => activeWidgetToolCategory.value?.templates || [])
 
 const normalizeStockCode = (value) => String(value || '').replace(/\D/g, '').padStart(6, '0').slice(-6)
 const normalizeStockWidgetCode = (value) => {
@@ -1720,66 +1671,96 @@ const getNextWidgetLayout = (type) => {
   }
 }
 
-const ensureWidgetToolDraft = (template) => {
-  if (!template?.id) return {}
-  const templateId = template.id
-  const defaults = template.defaults && typeof template.defaults === 'object'
-    ? { ...template.defaults }
-    : {}
-  const current = widgetToolDrafts.value[templateId]
-  const draft = current && typeof current === 'object' ? { ...current } : {}
-  let changed = false
-  Object.keys(defaults).forEach(key => {
-    if (!(key in draft)) {
-      draft[key] = defaults[key]
-      changed = true
-    }
-  })
-  if (!('title' in draft)) {
-    draft.title = ''
-    changed = true
+const getWidgetToolTemplateById = (templateId) => {
+  const id = String(templateId || '').trim()
+  if (!id) return null
+  for (const category of widgetToolCategories) {
+    const templates = Array.isArray(category?.templates) ? category.templates : []
+    const found = templates.find(item => item?.id === id)
+    if (found) return found
   }
-  if (!current || changed) {
-    widgetToolDrafts.value = {
-      ...widgetToolDrafts.value,
-      [templateId]: draft
-    }
-  }
-  return widgetToolDrafts.value[templateId]
+  return null
 }
 
-const switchWidgetToolCategory = (categoryId) => {
-  if (!categoryId) return
-  widgetToolActiveCategoryId.value = categoryId
-  const category = widgetToolCategories.find(item => item.id === categoryId)
-  const templates = Array.isArray(category?.templates) ? category.templates : []
-  templates.forEach(item => ensureWidgetToolDraft(item))
-  widgetToolExpandedTemplateIds.value = templates.length ? [templates[0].id] : []
-}
-
-const getWidgetToolDraftValue = (templateId, key) => {
-  const draft = widgetToolDrafts.value[templateId]
-  if (!draft || typeof draft !== 'object') return undefined
-  return draft[key]
-}
-
-const setWidgetToolDraftValue = (templateId, key, value) => {
-  const current = widgetToolDrafts.value[templateId]
-  const draft = current && typeof current === 'object' ? { ...current } : {}
-  draft[key] = value
-  widgetToolDrafts.value = {
-    ...widgetToolDrafts.value,
-    [templateId]: draft
-  }
+const getDroppedWidgetLayout = (type, event) => {
+  const size = getDefaultWidgetSize(type)
+  const boardEl = watchBoardRef.value
+  if (!boardEl || !event) return getNextWidgetLayout(type)
+  const rect = boardEl.getBoundingClientRect()
+  const scrollLeft = Number(boardEl.scrollLeft || 0)
+  const scrollTop = Number(boardEl.scrollTop || 0)
+  const rawX = Number(event.clientX || 0) - rect.left + scrollLeft - size.w / 2
+  const rawY = Number(event.clientY || 0) - rect.top + scrollTop - 28
+  const maxX = Math.max(0, Math.max(Number(boardEl.scrollWidth || 0), Number(boardEl.clientWidth || 0)) - size.w)
+  return normalizeWidgetLayout(
+    {
+      x: clampNumber(rawX, 0, maxX),
+      y: Math.max(0, rawY),
+      w: size.w,
+      h: size.h
+    },
+    watchWidgetDefs.value.length,
+    type
+  )
 }
 
 const openWidgetEditor = () => {
   if (!activeStrategy.value?.id) return
-  widgetToolDrafts.value = {}
-  const firstCategoryId = widgetToolCategories[0]?.id || ''
-  widgetToolActiveCategoryId.value = firstCategoryId
-  switchWidgetToolCategory(firstCategoryId)
-  widgetEditorVisible.value = true
+  const willOpen = !widgetEditorVisible.value
+  widgetEditorVisible.value = willOpen
+  if (!willOpen) {
+    widgetPaletteDragging.value = false
+    widgetPaletteDragTemplateId.value = ''
+    return
+  }
+  watchLayoutEditMode.value = true
+  if (!widgetToolExpandedCategoryIds.value.length) {
+    const firstCategoryId = widgetToolCategories[0]?.id || ''
+    widgetToolExpandedCategoryIds.value = firstCategoryId ? [firstCategoryId] : []
+  }
+}
+
+const onWidgetToolTemplateDragStart = (template, event) => {
+  if (!template?.id || !activeStrategy.value?.id) return
+  const templateId = String(template.id || '').trim()
+  if (!templateId) return
+  watchLayoutEditMode.value = true
+  widgetPaletteDragging.value = true
+  widgetPaletteDragTemplateId.value = templateId
+  if (event?.dataTransfer) {
+    event.dataTransfer.effectAllowed = 'copy'
+    event.dataTransfer.setData('text/plain', templateId)
+    event.dataTransfer.setData('application/x-watch-widget-template', templateId)
+  }
+}
+
+const onWidgetToolTemplateDragEnd = () => {
+  widgetPaletteDragging.value = false
+  widgetPaletteDragTemplateId.value = ''
+}
+
+const onWatchBoardDragOver = (event) => {
+  if (!widgetPaletteDragTemplateId.value) return
+  if (event?.dataTransfer) {
+    event.dataTransfer.dropEffect = 'copy'
+  }
+}
+
+const onWatchBoardDrop = async (event) => {
+  const draggedId = (
+    event?.dataTransfer?.getData('application/x-watch-widget-template')
+    || event?.dataTransfer?.getData('text/plain')
+    || widgetPaletteDragTemplateId.value
+    || ''
+  ).trim()
+  const template = getWidgetToolTemplateById(draggedId)
+  if (!template) {
+    onWidgetToolTemplateDragEnd()
+    return
+  }
+  const layout = getDroppedWidgetLayout(template.type, event)
+  await addWidgetFromToolTemplate(template, { layout, silent: true })
+  onWidgetToolTemplateDragEnd()
 }
 
 const getWidgetChartHeight = (widget) => {
@@ -3199,25 +3180,126 @@ const removeWatchWidget = async (widgetId) => {
   await saveWatchWidgetConfig({ silent: false })
 }
 
-const addWidgetFromToolTemplate = async (template) => {
+const renderWatchWidget = async (widget, sentimentCache = null) => {
+  const source = widget && typeof widget === 'object' ? widget : {}
+  try {
+    if (source.type === 'market_sentiment_chart') {
+      const daysBack = clampNumber(Number(source.params?.days_back || 30) || 30, 10, 240)
+      const chartKey = String(source.params?.chart_key || 'red_ratio_and_amount').trim() || 'red_ratio_and_amount'
+      let charts = sentimentCache && sentimentCache.get(daysBack)
+      if (!charts) {
+        const res = await ApiService.getMarketSentimentCharts(null, daysBack)
+        charts = res.data?.charts || {}
+        if (sentimentCache) sentimentCache.set(daysBack, charts)
+      }
+      const chartHtml = charts?.[chartKey] || ''
+      return {
+        ...source,
+        title: source.title || getSentimentChartTitle(chartKey),
+        chartHtml: chartHtml || '<div>暂无情绪图表</div>',
+        error: chartHtml ? '' : `未找到图表: ${chartKey}`
+      }
+    }
+
+    if (source.type === 'index_kline') {
+      const indexName = source.params?.index_name || '上证指数'
+      const daysRange = source.params?.days_range || 60
+      const res = await ApiService.getIndexKlineChart(indexName, daysRange)
+      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html || res?.data?.[indexName]?.chart_html
+      return {
+        ...source,
+        title: source.title || `${indexName} K线`,
+        chartHtml: chartHtml || '<div>暂无指数图表</div>',
+        error: chartHtml ? '' : '指数图表为空'
+      }
+    }
+
+    if (source.type === 'sector_kline') {
+      const sectorName = String(source.params?.sector_name || '半导体').trim() || '半导体'
+      const daysRange = clampNumber(Number(source.params?.days_range || 60) || 60, 20, 500)
+      const res = await ApiService.getSingleSectorKline(sectorName, {
+        days_range: daysRange,
+        format: 'chart'
+      })
+      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+      return {
+        ...source,
+        title: source.title || `${sectorName} K线`,
+        chartHtml: chartHtml || '<div>暂无板块图表</div>',
+        error: chartHtml ? '' : '板块图表为空'
+      }
+    }
+
+    if (source.type === 'stock_kline') {
+      const stockCode = normalizeStockWidgetCode(source.params?.stock_code || '000001')
+      const days = clampNumber(Number(source.params?.days || 120) || 120, 20, 500)
+      const res = await ApiService.getStockKline(stockCode, days, null, 'chart')
+      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+      return {
+        ...source,
+        title: source.title || `${stockCode} K线`,
+        chartHtml: chartHtml || '<div>暂无个股图表</div>',
+        error: chartHtml ? '' : '个股图表为空'
+      }
+    }
+
+    if (source.type === 'market_volume') {
+      const res = await ApiService.getMarketVolume()
+      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+      return {
+        ...source,
+        title: source.title || '市场量能对比',
+        chartHtml: chartHtml || '<div>暂无量能图表</div>',
+        error: chartHtml ? '' : '量能图表为空'
+      }
+    }
+
+    return {
+      ...source,
+      title: source.title || '未识别图表',
+      chartHtml: '<div>暂不支持该图表类型</div>',
+      error: source.type ? `未支持的类型: ${source.type}` : '未支持的图表类型'
+    }
+  } catch (error) {
+    console.error(error)
+    return {
+      ...source,
+      title: source.title || '图表加载失败',
+      chartHtml: '<div>图表加载失败</div>',
+      error: '图表加载失败'
+    }
+  }
+}
+
+const addWidgetFromToolTemplate = async (template, options = {}) => {
   const strategy = activeStrategy.value
   if (!strategy?.id || !template?.id) return
 
-  const draft = ensureWidgetToolDraft(template)
   const type = String(template.type || '').trim() || 'market_sentiment_chart'
-  const baseParams = normalizeWidgetParams(type, draft || {})
-  const title = String(draft?.title || '').trim() || buildWidgetTitle(type, baseParams)
+  const baseParams = normalizeWidgetParams(type, template.defaults || {})
+  const title = buildWidgetTitle(type, baseParams)
+  const preferredLayout = options?.layout && typeof options.layout === 'object'
+    ? normalizeWidgetLayout(options.layout, watchWidgetDefs.value.length, type)
+    : getNextWidgetLayout(type)
   const nextWidget = {
     id: genWidgetId(),
     type,
     title,
     params: baseParams,
-    layout: getNextWidgetLayout(type)
+    layout: preferredLayout
   }
 
-  watchWidgetDefs.value = [...watchWidgetDefs.value, nextWidget]
-  await saveWatchWidgetConfig({ silent: false })
-  await loadWatchWidgets()
+  const previousDefs = watchWidgetDefs.value
+  watchWidgetDefs.value = [...previousDefs, nextWidget]
+  const shouldSilent = options?.silent === true
+  const saved = await saveWatchWidgetConfig({ silent: shouldSilent })
+  if (!saved) {
+    watchWidgetDefs.value = previousDefs
+    return
+  }
+
+  const rendered = await renderWatchWidget(nextWidget)
+  watchWidgets.value = [...watchWidgets.value, rendered]
 }
 
 const loadWatchWidgets = async () => {
@@ -3225,9 +3307,13 @@ const loadWatchWidgets = async () => {
   watchError.value = ''
   watchWidgets.value = []
   watchWidgetDefs.value = []
-  if (!strategy || !activeMode.value || activeMode.value !== 'strategy_analysis') return
+  if (!strategy || !activeMode.value || activeMode.value !== 'strategy_analysis') {
+    widgetEditorVisible.value = false
+    return
+  }
 
   if (isKeyLevelStrategyConfig(strategy)) {
+    widgetEditorVisible.value = false
     watchLayoutEditMode.value = false
     watchLoading.value = false
     hydrateKeyBoardFromStrategy(strategy)
@@ -3254,90 +3340,9 @@ const loadWatchWidgets = async () => {
     const results = []
     const sentimentCache = new Map()
     for (const widget of widgetDefs) {
-      if (widget.type === 'market_sentiment_chart') {
-        const daysBack = clampNumber(Number(widget.params?.days_back || 30) || 30, 10, 240)
-        const chartKey = String(widget.params?.chart_key || 'red_ratio_and_amount').trim() || 'red_ratio_and_amount'
-        let charts = sentimentCache.get(daysBack)
-        if (!charts) {
-          const res = await ApiService.getMarketSentimentCharts(null, daysBack)
-          charts = res.data?.charts || {}
-          sentimentCache.set(daysBack, charts)
-        }
-        const chartHtml = charts?.[chartKey] || ''
-        results.push({
-          ...widget,
-          title: widget.title || getSentimentChartTitle(chartKey),
-          chartHtml: chartHtml || '<div>暂无情绪图表</div>',
-          error: chartHtml ? '' : `未找到图表: ${chartKey}`
-        })
-        continue
-      }
-
-      if (widget.type === 'index_kline') {
-        const indexName = widget.params?.index_name || '上证指数'
-        const daysRange = widget.params?.days_range || 60
-        const res = await ApiService.getIndexKlineChart(indexName, daysRange)
-        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html || res?.data?.[indexName]?.chart_html
-        results.push({
-          ...widget,
-          title: widget.title || `${indexName} K线`,
-          chartHtml: chartHtml || '<div>暂无指数图表</div>',
-          error: chartHtml ? '' : '指数图表为空'
-        })
-        continue
-      }
-
-      if (widget.type === 'sector_kline') {
-        const sectorName = String(widget.params?.sector_name || '半导体').trim() || '半导体'
-        const daysRange = clampNumber(Number(widget.params?.days_range || 60) || 60, 20, 500)
-        const res = await ApiService.getSingleSectorKline(sectorName, {
-          days_range: daysRange,
-          format: 'chart'
-        })
-        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
-        results.push({
-          ...widget,
-          title: widget.title || `${sectorName} K线`,
-          chartHtml: chartHtml || '<div>暂无板块图表</div>',
-          error: chartHtml ? '' : '板块图表为空'
-        })
-        continue
-      }
-
-      if (widget.type === 'stock_kline') {
-        const stockCode = normalizeStockWidgetCode(widget.params?.stock_code || '000001')
-        const days = clampNumber(Number(widget.params?.days || 120) || 120, 20, 500)
-        const res = await ApiService.getStockKline(stockCode, days, null, 'chart')
-        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
-        results.push({
-          ...widget,
-          title: widget.title || `${stockCode} K线`,
-          chartHtml: chartHtml || '<div>暂无个股图表</div>',
-          error: chartHtml ? '' : '个股图表为空'
-        })
-        continue
-      }
-
-      if (widget.type === 'market_volume') {
-        const res = await ApiService.getMarketVolume()
-        const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
-        results.push({
-          ...widget,
-          title: widget.title || '市场量能对比',
-          chartHtml: chartHtml || '<div>暂无量能图表</div>',
-          error: chartHtml ? '' : '量能图表为空'
-        })
-        continue
-      }
-
-      results.push({
-        ...widget,
-        title: widget.title || '未识别图表',
-        chartHtml: '<div>暂不支持该图表类型</div>',
-        error: widget.type ? `未支持的类型: ${widget.type}` : '未支持的图表类型'
-      })
+      const rendered = await renderWatchWidget(widget, sentimentCache)
+      results.push(rendered)
     }
-
     watchWidgets.value = results
   } catch (error) {
     console.error(error)
@@ -4126,7 +4131,8 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
 }
 
 .page-header {
@@ -4197,6 +4203,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
 .watch-body {
   grid-template-columns: 320px 1fr;
+  overflow: visible;
 }
 
 .watch-body.watch-left-collapsed {
@@ -4825,25 +4832,33 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   background: #f6f9fc;
 }
 
-.watch-panel,
+.watch-panel {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+
 .watch-card {
-  height: 100%;
+  height: auto;
+  min-height: 0;
 }
 
 .watch-card :deep(.el-card__body) {
-  height: calc(100% - 16px);
+  height: auto;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
+  overflow: visible;
 }
 
 .watch-content {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
+  flex: 1 0 auto;
+  min-height: auto;
+  overflow: visible;
 }
 
 .watch-placeholder {
@@ -4868,9 +4883,91 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 .watch-layout {
   display: flex;
   flex-direction: column;
+  flex: 1 0 auto;
+  min-height: auto;
+  overflow: visible;
+}
+
+.watch-layout-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
   flex: 1;
   min-height: 0;
+}
+
+.watch-layout-shell.tool-open {
+  grid-template-columns: 260px 1fr;
+}
+
+.watch-widget-tool-panel {
+  border: 1px solid #e5e9f0;
+  border-radius: 12px;
+  background: #f8fbff;
+  min-height: 0;
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.watch-widget-tool-head {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f2f8ff;
+  border-bottom: 1px solid #e5edf6;
+  padding: 10px 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2a3f55;
+}
+
+.watch-widget-tool-collapse {
+  padding: 8px 10px 4px;
+}
+
+.watch-widget-tool-collapse :deep(.el-collapse-item__header) {
+  font-size: 13px;
+  color: #2a3f55;
+}
+
+.watch-widget-tool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px 0 8px;
+}
+
+.watch-widget-tool-item {
+  border: 1px solid #dce6f1;
+  background: #fff;
+  color: #2f4358;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: grab;
+}
+
+.watch-widget-tool-item:hover {
+  border-color: #2f8cb7;
+  color: #1f7aa2;
+}
+
+.watch-widget-tool-item:active {
+  cursor: grabbing;
+}
+
+.watch-widget-tool-hint {
+  margin-top: auto;
+  border-top: 1px dashed #d5dfeb;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #6d7f92;
 }
 
 .watch-layout-board {
@@ -4878,7 +4975,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   border: 1px solid #e5e9f0;
   border-radius: 12px;
   background: linear-gradient(180deg, #f7fbff 0%, #fdfefe 100%);
-  overflow: auto;
+  overflow: visible;
   min-height: 360px;
 }
 
@@ -4887,6 +4984,11 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
     linear-gradient(to right, rgba(47, 140, 183, 0.08) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(47, 140, 183, 0.08) 1px, transparent 1px);
   background-size: 16px 16px;
+}
+
+.watch-layout-board.palette-dragging {
+  border-color: #2f8cb7;
+  box-shadow: inset 0 0 0 1px rgba(47, 140, 183, 0.32);
 }
 
 .key-board {
@@ -5424,6 +5526,15 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
   .key-chart-panel {
     min-width: 0;
+  }
+
+  .watch-layout-shell.tool-open {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .watch-widget-tool-panel {
+    max-height: 260px;
   }
 
   .widget-tool-layout {

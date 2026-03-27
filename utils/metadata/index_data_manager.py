@@ -270,6 +270,23 @@ class IndexMetadataManager:
                                 code_value = str(row[code_col]).zfill(6)
                                 code_to_name[code_value] = row[name_col]
 
+                        # Use real index trading dates as the primary gap baseline to avoid holiday-calendar drift.
+                        reference_days: List[date] = []
+                        ref_code = "000001"
+                        try:
+                            ref_dates_df = (
+                                existing_metadata
+                                .filter(pl.col(code_col).cast(pl.Utf8, strict=False).str.zfill(6) == ref_code)
+                                .select(pl.col(date_col).cast(pl.Date, strict=False).alias(date_col))
+                                .drop_nulls()
+                                .unique()
+                                .sort(date_col)
+                            )
+                            if not ref_dates_df.is_empty():
+                                reference_days = [row[date_col] for row in ref_dates_df.iter_rows(named=True)]
+                        except Exception:
+                            reference_days = []
+
                         # 扫描窗口从 2015-01-01 起，但不会早于该指数当前最早可见记录，
                         # 并将终点扩展到“今天”，从而识别尾部连续缺失。
                         gap_window_anchor = date(2015, 1, 1)
@@ -287,7 +304,11 @@ class IndexMetadataManager:
                                 max_date = max_date.date()
                             scan_start = max(gap_window_anchor, min_date)
                             scan_end = max(max_date, gap_window_end)
-                            for trading_day in trading_calendar.get_trading_days_in_range(scan_start, scan_end):
+                            if reference_days:
+                                trading_days = [d for d in reference_days if scan_start <= d <= scan_end]
+                            else:
+                                trading_days = trading_calendar.get_trading_days_in_range(scan_start, scan_end)
+                            for trading_day in trading_days:
                                 if (trading_day, code_value) not in existing_pair_set:
                                     missing_by_code.setdefault(code_value, []).append(trading_day)
 
@@ -330,6 +351,10 @@ class IndexMetadataManager:
                                     existing_metadata.write_parquet(self.metadata_path)
                 except Exception as gap_error:
                     print(f"[] {gap_error}")
+                finally:
+                    print(
+                        f"[gap-check] checked={gap_checked}, missing={gap_missing_count}, filled={gap_filled_rows}"
+                    )
 
             metadata_latest_date = None
             if existing_metadata is not None and not existing_metadata.is_empty() and date_col in existing_metadata.columns:

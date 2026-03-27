@@ -38,12 +38,10 @@ MARKDOWN_DIR = REFERENCE_DIR / "markdown"
 CRAWLED_DIR = REFERENCE_DIR / "crawled"
 RESOURCES_FILE = REFERENCE_DIR / "resources.json"
 CONVERSATIONS_FILE = MEMORY_DIR / "conversations.json"
-STRATEGY_DIR = STORE_DIR / "strategy"
-LEGACY_STRATEGY_DIR = STORE_DIR / "strategies"
-STRATEGIES_FILE = STRATEGY_DIR / "strategies.json"
-STRATEGY_INDEX_FILE = STRATEGY_DIR / "strategies_index.json"
-LEGACY_STRATEGIES_FILE = STORE_DIR / "strategies.json"
-LEGACY_STRATEGY_INDEX_FILE = STORE_DIR / "strategies_index.json"
+STRATEGY_ROOT_DIR = STORE_DIR / "strategy"
+STRATEGY_DIR = STRATEGY_ROOT_DIR / "strategies"
+STRATEGIES_FILE = STRATEGY_ROOT_DIR / "strategies.json"
+STRATEGY_INDEX_FILE = STRATEGY_ROOT_DIR / "strategies_index.json"
 MEMORY_PROFILES_FILE = MEMORY_DIR / "memory_profiles.json"
 MEMORY_LINKS_FILE = MEMORY_DIR / "memory_links.json"
 MEMORY_PORTRAITS_FILE = MEMORY_DIR / "memory_portraits.json"
@@ -297,28 +295,8 @@ def _ensure_store() -> None:
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     MARKDOWN_DIR.mkdir(parents=True, exist_ok=True)
     CRAWLED_DIR.mkdir(parents=True, exist_ok=True)
+    STRATEGY_ROOT_DIR.mkdir(parents=True, exist_ok=True)
     STRATEGY_DIR.mkdir(parents=True, exist_ok=True)
-    # Backward compatibility: migrate index/aggregate files from old root location.
-    if LEGACY_STRATEGY_INDEX_FILE.exists() and not STRATEGY_INDEX_FILE.exists():
-        try:
-            shutil.copy2(LEGACY_STRATEGY_INDEX_FILE, STRATEGY_INDEX_FILE)
-        except Exception:
-            pass
-    if LEGACY_STRATEGIES_FILE.exists() and not STRATEGIES_FILE.exists():
-        try:
-            shutil.copy2(LEGACY_STRATEGIES_FILE, STRATEGIES_FILE)
-        except Exception:
-            pass
-    # Backward compatibility: migrate strategy JSON files from old folder name.
-    if LEGACY_STRATEGY_DIR.exists() and LEGACY_STRATEGY_DIR.is_dir():
-        for legacy_file in LEGACY_STRATEGY_DIR.glob("*.json"):
-            target_file = STRATEGY_DIR / legacy_file.name
-            if target_file.exists():
-                continue
-            try:
-                shutil.copy2(legacy_file, target_file)
-            except Exception:
-                pass
 
 
 def _read_json(path: Path, default):
@@ -1103,7 +1081,7 @@ def _safe_strategy_filename_component(name: str) -> str:
     return safe[:96]
 
 
-def _legacy_strategy_file_path(strategy_id: str) -> Path:
+def _default_strategy_file_path(strategy_id: str) -> Path:
     return STRATEGY_DIR / f"{_normalize_strategy_id(strategy_id)}.json"
 
 
@@ -1117,11 +1095,25 @@ def _strategy_storage_filename(strategy: Dict) -> str:
 def _resolve_strategy_file_from_index(strategy_id: str, strategy_files: Dict[str, str]) -> Path:
     sid = _normalize_strategy_id(strategy_id)
     mapped = strategy_files.get(sid)
+    candidates: List[Path] = []
     if isinstance(mapped, str) and mapped.strip():
-        candidate_name = Path(mapped.strip()).name
-        if candidate_name.lower().endswith(".json"):
-            return STRATEGY_DIR / candidate_name
-    return _legacy_strategy_file_path(sid)
+        raw = mapped.strip().replace("\\", "/")
+        rel_path = Path(raw)
+        if raw.lower().endswith(".json"):
+            if not rel_path.is_absolute() and ".." not in rel_path.parts:
+                parts = [p for p in rel_path.parts if p]
+                if len(parts) == 1:
+                    # Bare filename -> always resolve inside strategy/strategies/
+                    candidates.append(STRATEGY_DIR / parts[0])
+                elif parts and parts[0].lower() == "strategies":
+                    # Relative path explicitly under strategies/
+                    candidates.append(STRATEGY_ROOT_DIR / rel_path)
+
+    candidates.append(_default_strategy_file_path(sid))
+    for path in candidates:
+        if path.exists():
+            return path
+    return candidates[0]
 
 
 def _load_strategies_payload() -> Dict:
@@ -1130,9 +1122,8 @@ def _load_strategies_payload() -> Dict:
     active_strategy_id = ""
 
     # New layout: one JSON file per strategy + index file
-    index_file = STRATEGY_INDEX_FILE if STRATEGY_INDEX_FILE.exists() else LEGACY_STRATEGY_INDEX_FILE
-    if index_file.exists():
-        raw_index = _read_json(index_file, {"strategy_ids": [], "active_strategy_id": ""})
+    if STRATEGY_INDEX_FILE.exists():
+        raw_index = _read_json(STRATEGY_INDEX_FILE, {"strategy_ids": [], "active_strategy_id": ""})
         strategy_ids = raw_index.get("strategy_ids", [])
         strategy_files = raw_index.get("strategy_files") if isinstance(raw_index.get("strategy_files"), dict) else {}
         seen = set()
@@ -1144,9 +1135,9 @@ def _load_strategies_payload() -> Dict:
                     continue
                 path = _resolve_strategy_file_from_index(sid, strategy_files)
                 rec = _read_json(path, None)
-                # Fallback to legacy id-based filename when mapped filename is stale.
-                if (not isinstance(rec, dict) or not rec.get("id")) and path != _legacy_strategy_file_path(sid):
-                    rec = _read_json(_legacy_strategy_file_path(sid), None)
+                # Fallback to default id-based filename when mapped filename is stale.
+                if (not isinstance(rec, dict) or not rec.get("id")) and path != _default_strategy_file_path(sid):
+                    rec = _read_json(_default_strategy_file_path(sid), None)
                 if isinstance(rec, dict) and rec.get("id"):
                     normalized = _normalize_strategy_record(rec)
                     strategies.append(normalized)
@@ -1173,8 +1164,7 @@ def _load_strategies_payload() -> Dict:
         return {"strategies": strategies, "active_strategy_id": active_strategy_id}
 
     # Legacy layout fallback: migrate from aggregated strategies.json
-    strategies_file = STRATEGIES_FILE if STRATEGIES_FILE.exists() else LEGACY_STRATEGIES_FILE
-    raw = _read_json(strategies_file, {"strategies": [], "active_strategy_id": ""})
+    raw = _read_json(STRATEGIES_FILE, {"strategies": [], "active_strategy_id": ""})
     if isinstance(raw, list):
         raw = {"strategies": raw, "active_strategy_id": ""}
 
@@ -1233,7 +1223,7 @@ def _save_strategies_payload(payload: Dict) -> None:
             safe_name = _safe_strategy_filename_component(item.get("name") or "")
             filename = f"{safe_name or sid}__{sid}.json"
         used_filenames.add(filename)
-        strategy_files[sid] = filename
+        strategy_files[sid] = f"strategies/{filename}"
         path = STRATEGY_DIR / filename
         target_files.add(filename)
         _write_json(path, item)
@@ -2485,6 +2475,8 @@ def _parse_requirements_ready(pm_text: str) -> bool:
     payload = _extract_json_payload(pm_text)
     if isinstance(payload, dict):
         raw = payload.get("requirements_ready")
+        if raw is None and isinstance(payload.get("requirements"), dict):
+            raw = payload.get("requirements", {}).get("ready")
         if isinstance(raw, bool):
             return raw
         if isinstance(raw, (int, float)):
@@ -2497,9 +2489,25 @@ def _parse_requirements_ready(pm_text: str) -> bool:
                 return False
 
     text = str(pm_text or "")
-    hit = re.search(r"requirements_ready\s*[:=]\s*(true|false|1|0)", text, flags=re.IGNORECASE)
-    if hit:
-        return hit.group(1).lower() in {"true", "1"}
+    hits = re.findall(
+        r"""["'`]?requirements_ready["'`]?\s*(?:[:=：]|->)\s*["'`]?(true|false|1|0|yes|no|ready|not_ready|pending|ok)["'`]?""",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if hits:
+        token = str(hits[-1]).strip().lower()
+        return token in {"true", "1", "yes", "ready", "ok"}
+
+    # Fallback: tolerate "requirements_ready true" (without separator)
+    loose_hits = re.findall(
+        r"""["'`]?requirements_ready["'`]?\s+(true|false|1|0|yes|no|ready|not_ready|pending|ok)""",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if loose_hits:
+        token = str(loose_hits[-1]).strip().lower()
+        return token in {"true", "1", "yes", "ready", "ok"}
+
     return False
 
 
@@ -2659,6 +2667,14 @@ def _run_strategy_edit_orchestration(
         )
 
     requirements_ready = _parse_requirements_ready(pm_text)
+    _append_agent_log(
+        "orchestration_requirements_ready_parsed",
+        {
+            **(trace_context or {}),
+            "requirements_ready": requirements_ready,
+            "pm_output_preview": _clip_text(pm_text, max_chars=600),
+        },
+    )
     if not requirements_ready:
         waiting_text = (
             "【阶段1：PM需求澄清】\n"
