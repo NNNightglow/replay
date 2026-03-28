@@ -59,3 +59,23 @@ description: "跨角色协同编排与任务规划：先澄清需求，再拆解
 - 先确认需求清晰，再进入实现与分析。
 - 计划必须可执行、可验证，避免抽象口号。
 - 优先走 MVP 路径，先交付主链路，再做扩展。
+
+## 脚本入口（查看 subagent skill）
+
+- 脚本：`scripts/list_subagent_skills.py`
+- 默认展示 `architect_agent` 的下游 subagent 及其 `skill_ids`
+
+示例：
+
+- 查看 `architect_agent` 下游 subagent 的 skill
+  - `python skills/orchestration/scripts/list_subagent_skills.py`
+- 递归查看下游链路
+  - `python skills/orchestration/scripts/list_subagent_skills.py --recursive`
+- 查看全部 agent 的 skill
+  - `python skills/orchestration/scripts/list_subagent_skills.py --all-agents`
+- JSON 输出（便于上层程序消费）
+  - `python skills/orchestration/scripts/list_subagent_skills.py --json`
+- 查看指定 subagent（可多次传入）
+  - `python skills/orchestration/scripts/list_subagent_skills.py --agent analyst_agent --agent engineer_agent`
+- 同时查看 skill 的内容摘要与能力条目
+  - `python skills/orchestration/scripts/list_subagent_skills.py --agent analyst_agent --include-skill-content`
