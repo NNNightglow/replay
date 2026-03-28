@@ -43,6 +43,16 @@ def rewrite_markdown_with_llm(
     )
 
 
+def summarize_markdown_with_llm(
+    input_path: Path,
+    output_path: Path,
+) -> None:
+    return _BRIDGE.summarize_markdown_with_llm(
+        input_path=input_path,
+        output_path=output_path,
+    )
+
+
 def convert_file_to_markdown_via_skill(
     input_file: Path,
     output_markdown: Path,

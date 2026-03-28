@@ -458,6 +458,20 @@ class ApiService {
     return api.get(`/api/strategy-watch/resources/${resourceId}/markdown`)
   }
 
+  static async downloadStrategyResourceFile(resourceId, format = 'markdown', params = {}) {
+    return api.get(`/api/strategy-watch/resources/${resourceId}/download`, {
+      params: { format, ...(params || {}) },
+      responseType: 'blob'
+    })
+  }
+
+  static async downloadStrategyResourceAiSummary(resourceId, params = {}) {
+    return api.get(`/api/strategy-watch/resources/${resourceId}/ai-summary/download`, {
+      params,
+      responseType: 'blob'
+    })
+  }
+
   static async downloadCrawledFile(relpath) {
     return api.get('/api/strategy-watch/crawled/download', {
       params: { path: relpath },

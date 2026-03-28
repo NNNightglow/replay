@@ -273,6 +273,40 @@ def _build_rewrite_prompt(paragraph: str) -> str:
     )
 
 
+def _build_video_summary_prompt(full_markdown: str) -> str:
+    return (
+        "下面给你一整篇 Markdown 文本（可能来自视频转写或文档抽取），请基于全文输出中文总结。\n"
+        "要求：\n"
+        "1) 先给出 5-10 行核心结论要点；\n"
+        "2) 再给出结构化分节总结（按主题归纳）；\n"
+        "3) 最后给出“可执行建议/行动项”；\n"
+        "4) 不要编造原文没有的信息，结论需可追溯到原文。\n"
+        "只输出总结正文，不要输出额外说明。\n\n"
+        "原始 Markdown 全文如下：\n"
+        f"{full_markdown.strip()}"
+    )
+
+
+def _resolve_llm_config(default_model: str, model_env_vars: Optional[List[str]] = None) -> tuple[str, str, str, int]:
+    _load_env_files()
+    api_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
+    if not api_key:
+        raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
+
+    candidate_models: List[str] = []
+    for env_name in model_env_vars or []:
+        value = (os.getenv(env_name) or "").strip()
+        if value:
+            candidate_models.append(value)
+    candidate_models.append((os.getenv("OPENAI_MODEL") or "").strip())
+    candidate_models.append(default_model)
+    model = next((m for m in candidate_models if m), default_model)
+
+    base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
+    timeout = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "180"))
+    return api_key, model, base_url, timeout
+
+
 def _call_llm(messages: List[dict], model: str, base_url: str, api_key: str, timeout: int) -> str:
     response = requests.post(
         f"{base_url.rstrip('/')}/chat/completions",
@@ -295,13 +329,10 @@ def _call_llm(messages: List[dict], model: str, base_url: str, api_key: str, tim
 
 
 def rewrite_markdown_with_llm(input_path: Path, output_path: Path, max_chunk_len: int = 1000, sleep_ms: int = 0) -> None:
-    _load_env_files()
-    api_key = (os.getenv("OPENAI_API_KEY") or os.getenv("LLM_API_KEY") or "").strip()
-    if not api_key:
-        raise RuntimeError("OPENAI_API_KEY / LLM_API_KEY is not configured.")
-    model = (os.getenv("OPENAI_REWRITE_MODEL") or os.getenv("OPENAI_MODEL") or "gpt-4o-mini").strip()
-    base_url = (os.getenv("OPENAI_BASE_URL") or "https://api.openai.com/v1").strip()
-    timeout = int(os.getenv("OPENAI_TIMEOUT_SECONDS", "180"))
+    api_key, model, base_url, timeout = _resolve_llm_config(
+        default_model="gpt-4o-mini",
+        model_env_vars=["OPENAI_REWRITE_MODEL"],
+    )
 
     raw = input_path.read_text(encoding="utf-8", errors="ignore")
     front, rest = _parse_frontmatter(raw)
@@ -342,6 +373,42 @@ def rewrite_markdown_with_llm(input_path: Path, output_path: Path, max_chunk_len
     output_path.write_text(output_text, encoding="utf-8")
 
 
+def summarize_video_markdown_with_llm(input_path: Path, output_path: Path) -> None:
+    api_key, model, base_url, timeout = _resolve_llm_config(
+        default_model="dsv3.2",
+        model_env_vars=["OPENAI_VIDEO_SUMMARY_MODEL", "VIDEO_SUMMARY_MODEL"],
+    )
+
+    raw = input_path.read_text(encoding="utf-8", errors="ignore")
+    front, rest = _parse_frontmatter(raw)
+    pre, content = _extract_content(rest)
+    if not content.strip():
+        raise RuntimeError("Input markdown has empty content, skipped video summary.")
+
+    summary = _call_llm(
+        messages=[
+            {"role": "system", "content": "你是一个严谨的中文内容总结助手，请只基于用户提供的全文进行总结。"},
+            {"role": "user", "content": _build_video_summary_prompt(raw)},
+        ],
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
+        timeout=timeout,
+    )
+    summary = _format_readable_lines(summary) or summary.strip()
+
+    prefix = pre.rstrip() if pre.strip() else f"# {input_path.name}"
+    output_text = (
+        (front + "\n" if front else "")
+        + prefix
+        + "\n## AI Summary\n"
+        + summary.strip()
+        + "\n"
+    )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(output_text, encoding="utf-8")
+
+
 def maybe_rewrite_media_markdown(output_markdown: Path, progress_callback: Optional[ProgressCallback] = None) -> None:
     raw_backup_path = output_markdown.with_name(f"{output_markdown.stem}__raw.md")
     try:
@@ -352,6 +419,17 @@ def maybe_rewrite_media_markdown(output_markdown: Path, progress_callback: Optio
     if progress_callback:
         progress_callback(95, 100, "LLM rewriting")
     rewrite_markdown_with_llm(output_markdown, output_markdown, max_chunk_len=800, sleep_ms=0)
+
+
+def maybe_generate_video_summary_markdown(
+    output_markdown: Path,
+    progress_callback: Optional[ProgressCallback] = None,
+) -> Path:
+    if progress_callback:
+        progress_callback(98, 100, "LLM summarizing")
+    summary_path = output_markdown.with_name(f"{output_markdown.stem}__ai_summary.md")
+    summarize_video_markdown_with_llm(output_markdown, summary_path)
+    return summary_path
 
 
 def main() -> int:
@@ -374,6 +452,7 @@ def main() -> int:
     for f in files:
         printer.start_file(f)
         progress_cb = _make_progress_callback(printer, f"Processing: {f.name}")
+        summary_output: Optional[Path] = None
         try:
             content = convert_media(f, whisper_model=args.whisper_model, progress_callback=progress_cb)
             md = build_markdown(f, content=content, status="ok")
@@ -389,10 +468,17 @@ def main() -> int:
             except Exception as exc:
                 failed += 1
                 print(f"[rewrite failed] {out}: {exc}", file=sys.stderr)
+        if f.suffix.lower() == ".mp4" and "status: ok" in md[:1200]:
+            try:
+                summary_output = maybe_generate_video_summary_markdown(out, progress_callback=progress_cb)
+            except Exception as exc:
+                print(f"[video summary failed] {out}: {exc}", file=sys.stderr)
 
         status = "ok" if "status: ok" in md[:1200] else "failed"
         printer.finish_file(status)
         print(f"[written] {out}")
+        if summary_output:
+            print(f"[written] {summary_output}")
 
     print(f"Processed {len(files)} files; failed: {failed}")
     return 0 if failed == 0 else 2

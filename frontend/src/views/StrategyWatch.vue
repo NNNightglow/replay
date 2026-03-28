@@ -123,7 +123,8 @@
                 </div>
               </div>
               <div class="resource-buttons">
-                <el-button link @click="downloadResource(res)">下载</el-button>
+                <el-button link @click="downloadResourceMarkdown(res)">下载原MD</el-button>
+                <el-button link @click="downloadResourceAiSummary(res)">下载AI总结</el-button>
                 <el-button link @click="renameResource(res)">重命名</el-button>
                 <el-button
                   link
@@ -767,6 +768,8 @@
                 </div>
               </el-checkbox>
               <div class="manage-actions">
+                <el-button link size="small" @click="downloadResourceMarkdown(res)">下载原MD</el-button>
+                <el-button link size="small" @click="downloadResourceAiSummary(res)">下载AI总结</el-button>
                 <el-button link size="small" @click="renameResource(res)">重命名</el-button>
                 <el-button link size="small" @click="quickTransferResource(res)">移动/复制</el-button>
                 <el-button link size="small" type="danger" @click="deleteResource(res.id)">删除</el-button>
@@ -3681,17 +3684,37 @@ const deleteResource = async (resourceId) => {
   }
 }
 
-const downloadResource = async (resource) => {
+const downloadResourceMarkdown = async (resource) => {
   if (!resource?.id) return
   try {
-    const res = await ApiService.getStrategyResourceMarkdown(resource.id)
-    const content = res.data?.content || ''
+    const blob = await ApiService.downloadStrategyResourceFile(resource.id, 'markdown')
     const baseName = (resource.original_name || resource.id)
       .replace(/[\\/:*?"<>|]+/g, '_')
       .replace(/\s+/g, ' ')
       .trim()
     const filename = `${baseName || resource.id}.md`
-    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const downloadResourceAiSummary = async (resource) => {
+  if (!resource?.id) return
+  try {
+    const blob = await ApiService.downloadStrategyResourceAiSummary(resource.id)
+    const baseName = (resource.original_name || resource.id)
+      .replace(/[\\/:*?"<>|]+/g, '_')
+      .replace(/\s+/g, ' ')
+      .trim()
+    const filename = `${baseName || resource.id}__ai_summary.md`
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

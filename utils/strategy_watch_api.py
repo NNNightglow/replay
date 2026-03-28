@@ -23,6 +23,7 @@ from utils.agents import (
     convert_file_to_markdown_via_skill,
     crawl_wechat_articles_from_text,
     list_agent_profiles,
+    summarize_markdown_with_llm,
     set_runtime_event_hook,
 )
 
@@ -272,6 +273,35 @@ def _safe_markdown_stem(filename: str) -> str:
 def _markdown_filename(resource_id: str, original_name: str) -> str:
     safe_stem = _safe_markdown_stem(original_name)
     return f"{safe_stem}__{resource_id}.md"
+
+
+def _ai_summary_filename(original_name: str) -> str:
+    safe_stem = _safe_markdown_stem(original_name)
+    return f"{safe_stem}__ai_summary.md"
+
+
+def _resource_ai_summary_path(resource: Dict) -> Path:
+    original_name = (resource.get("original_name") or "").strip() or (resource.get("id") or "resource")
+    return (MARKDOWN_DIR / _ai_summary_filename(original_name)).resolve()
+
+
+def _resolve_markdown_path_from_resource(resource: Dict) -> Tuple[Optional[Path], str]:
+    markdown_rel = (resource.get("markdown_relpath") or "").strip()
+    if not markdown_rel:
+        return None, "资源 markdown 路径不存在。"
+    markdown_path = (BASE_DIR / markdown_rel).resolve()
+    try:
+        markdown_path.relative_to(MARKDOWN_DIR.resolve())
+    except Exception:
+        return None, "非法 markdown 路径。"
+    if not markdown_path.exists() or not markdown_path.is_file():
+        return None, "资源 markdown 文件不存在。"
+    return markdown_path, ""
+
+
+def _build_resource_markdown_download_name(resource: Dict) -> str:
+    stem = _safe_markdown_stem((resource.get("original_name") or "").strip() or (resource.get("id") or "resource"))
+    return f"{stem}.md"
 
 
 def _compose_user_content_with_prompt_template(user_content: str, prompt_template: str) -> str:
@@ -3505,6 +3535,73 @@ def get_resource_markdown(resource_id: str):
             "timestamp": _now_iso(),
         }
     )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/resources/<string:resource_id>/download", methods=["GET"])
+def download_resource_file(resource_id: str):
+    fmt = (request.args.get("format") or "markdown").strip().lower()
+    with _STORE_LOCK:
+        payload = _load_resources_payload()
+        resources = payload.get("resources", [])
+    target = _find_by_id(resources, resource_id)
+    if not target:
+        return jsonify({"success": False, "error": "资源不存在。", "timestamp": _now_iso()}), 404
+
+    if fmt in {"source", "origin", "original", "markdown", "md"}:
+        markdown_path, err = _resolve_markdown_path_from_resource(target)
+        if err:
+            return jsonify({"success": False, "error": err, "timestamp": _now_iso()}), 404
+        return send_file(
+            markdown_path,
+            as_attachment=True,
+            download_name=_build_resource_markdown_download_name(target),
+        )
+
+    if fmt in {"ai_summary", "summary"}:
+        markdown_path, err = _resolve_markdown_path_from_resource(target)
+        if err:
+            return jsonify({"success": False, "error": err, "timestamp": _now_iso()}), 404
+        summary_path = _resource_ai_summary_path(target)
+        regenerate = (request.args.get("regenerate") or "").strip().lower() in {"1", "true", "yes", "on"}
+        if regenerate or (not summary_path.exists()):
+            try:
+                summary_path.parent.mkdir(parents=True, exist_ok=True)
+                summarize_markdown_with_llm(markdown_path, summary_path)
+            except Exception as exc:
+                return jsonify({"success": False, "error": f"生成 AI 总结失败: {exc}", "timestamp": _now_iso()}), 500
+        if not summary_path.exists() or not summary_path.is_file():
+            return jsonify({"success": False, "error": "AI 总结文件不存在。", "timestamp": _now_iso()}), 404
+        return send_file(summary_path, as_attachment=True, download_name=summary_path.name)
+
+    return jsonify({"success": False, "error": "不支持的下载格式。", "timestamp": _now_iso()}), 400
+
+
+@strategy_watch_bp.route("/api/strategy-watch/resources/<string:resource_id>/ai-summary/download", methods=["GET"])
+def download_resource_ai_summary(resource_id: str):
+    with _STORE_LOCK:
+        payload = _load_resources_payload()
+        resources = payload.get("resources", [])
+    target = _find_by_id(resources, resource_id)
+    if not target:
+        return jsonify({"success": False, "error": "资源不存在。", "timestamp": _now_iso()}), 404
+
+    markdown_path, err = _resolve_markdown_path_from_resource(target)
+    if err:
+        return jsonify({"success": False, "error": err, "timestamp": _now_iso()}), 404
+
+    summary_path = _resource_ai_summary_path(target)
+    regenerate = (request.args.get("regenerate") or "").strip().lower() in {"1", "true", "yes", "on"}
+    if regenerate or (not summary_path.exists()):
+        try:
+            summary_path.parent.mkdir(parents=True, exist_ok=True)
+            summarize_markdown_with_llm(markdown_path, summary_path)
+        except Exception as exc:
+            return jsonify({"success": False, "error": f"生成 AI 总结失败: {exc}", "timestamp": _now_iso()}), 500
+
+    if not summary_path.exists() or not summary_path.is_file():
+        return jsonify({"success": False, "error": "AI 总结文件不存在。", "timestamp": _now_iso()}), 404
+
+    return send_file(summary_path, as_attachment=True, download_name=summary_path.name)
 
 
 @strategy_watch_bp.route("/api/strategy-watch/crawled/download", methods=["GET"])

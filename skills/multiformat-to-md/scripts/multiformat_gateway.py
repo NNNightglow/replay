@@ -326,13 +326,28 @@ def convert_file_to_markdown_via_skill(
                         progress_callback(int(match.group(1)), 100, (match.group(2) or "").strip())
 
         returncode = proc.wait()
-        generated = list(tmp_out.glob("*.md"))
+        generated = sorted(tmp_out.glob("*.md"))
         if not generated:
             detail = " ".join(output_lines).strip() or f"converter exit code: {returncode}"
             return "failed", f"No markdown generated. {detail}"
 
         output_markdown.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(generated[0], output_markdown)
+        primary_generated = tmp_out / f"{input_file.stem}.md"
+        if not primary_generated.exists():
+            primary_generated = generated[0]
+        shutil.copyfile(primary_generated, output_markdown)
+        output_stem = output_markdown.stem
+        preferred_stem = output_stem.rsplit("__", 1)[0] if "__" in output_stem else output_stem
+        for extra_md in generated:
+            if extra_md == primary_generated:
+                continue
+            extra_name = extra_md.name
+            if extra_name.endswith("__ai_summary.md"):
+                extra_name = f"{preferred_stem}__ai_summary.md"
+            extra_target = output_markdown.parent / extra_name
+            if extra_target == output_markdown:
+                continue
+            shutil.copyfile(extra_md, extra_target)
 
         status, err = _parse_markdown_status(output_markdown)
         if returncode not in (0, 2) and status == "ok":
@@ -362,4 +377,20 @@ def rewrite_markdown_with_llm(
         output_path=output_path,
         max_chunk_len=max_chunk_len,
         sleep_ms=sleep_ms,
+    )
+
+
+def summarize_markdown_with_llm(
+    input_path: Path,
+    output_path: Path,
+) -> None:
+    # Compatibility export for existing callers through utils.agents.dataloaders.
+    scripts_dir = Path(__file__).resolve().parent
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from media2md import summarize_video_markdown_with_llm as _summarize  # local import to avoid cycles
+
+    _summarize(
+        input_path=input_path,
+        output_path=output_path,
     )

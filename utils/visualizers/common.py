@@ -283,6 +283,19 @@ class UniversalKlineChart:
         """
 
 
+        def _safe_float(value: Any, default: float = 0.0) -> float:
+            """Robust float conversion for None/empty/invalid values."""
+            try:
+                if value is None:
+                    return default
+                if isinstance(value, str):
+                    value = value.strip()
+                    if not value:
+                        return default
+                return float(value)
+            except Exception:
+                return default
+
         # 确保数据按日期排序
         if hasattr(data, 'sort'):
             data = data.sort('日期')
@@ -302,16 +315,12 @@ class UniversalKlineChart:
             close_val = d.get('收盘', d.get('收盘价', 0))
             low_val = d.get('最低', d.get('最低价', 0))
             high_val = d.get('最高', d.get('最高价', 0))
-            # 处理None值
-            try:
-                open_val = float(open_val) if open_val is not None else 0.0
-                close_val = float(close_val) if close_val is not None else 0.0
-                low_val = float(low_val) if low_val is not None else 0.0
-                high_val = float(high_val) if high_val is not None else 0.0
-                k_data.append([open_val, close_val, low_val, high_val])
-            except (ValueError, TypeError):
-                # 如果转换失败，跳过这条数据
-                continue
+            k_data.append([
+                _safe_float(open_val, 0.0),
+                _safe_float(close_val, 0.0),
+                _safe_float(low_val, 0.0),
+                _safe_float(high_val, 0.0),
+            ])
 
         # 准备成交量/成交额数据
         volumes = []
@@ -322,27 +331,28 @@ class UniversalKlineChart:
             # 优先使用成交额，转换为亿元单位
             for d in data_list:
                 amount = d.get(amount_column, 0)
-                volumes.append(float(amount) / 100000000)  # 转换为亿元
+                volumes.append(_safe_float(amount, 0.0) / 100000000)  # 转换为亿元
             volume_label = "成交额"
             volume_unit = "亿"
         elif volume_column and volume_column in (data.columns if hasattr(data, 'columns') else [d.keys() for d in data_list][0]):
             # 使用成交量，转换为万手单位
             for d in data_list:
                 vol = d.get(volume_column, 0)
-                volumes.append(float(vol) / 10000)  # 转换为万手
+                volumes.append(_safe_float(vol, 0.0) / 10000)  # 转换为万手
             volume_label = "成交量"
             volume_unit = "万手"
         else:
             # 默认尝试查找成交量或成交额字段
             for d in data_list:
                 amount = d.get('成交额', 0)
-                if amount > 0:
-                    volumes.append(float(amount) / 100000000)  # 转换为亿元
+                amount_val = _safe_float(amount, 0.0)
+                if amount_val > 0:
+                    volumes.append(amount_val / 100000000)  # 转换为亿元
                     volume_label = "成交额"
                     volume_unit = "亿"
                 else:
                     vol = d.get('成交量', d.get('volume', d.get('vol', 0)))
-                    volumes.append(float(vol) / 10000)  # 转换为万手
+                    volumes.append(_safe_float(vol, 0.0) / 10000)  # 转换为万手
                     volume_label = "成交量"
                     volume_unit = "万手"
 
