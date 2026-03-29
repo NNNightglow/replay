@@ -275,12 +275,10 @@ def _build_rewrite_prompt(paragraph: str) -> str:
 
 def _build_video_summary_prompt(full_markdown: str) -> str:
     return (
-        "下面给你一整篇 Markdown 文本（可能来自视频转写或文档抽取），请基于全文输出中文总结。\n"
+        "下面给你一整篇来自视频转写或文档抽取的 Markdown 文本，请基于全文输出中文总结。\n"
         "要求：\n"
-        "1) 先给出 5-10 行核心结论要点；\n"
-        "2) 再给出结构化分节总结（按主题归纳）；\n"
-        "3) 最后给出“可执行建议/行动项”；\n"
-        "4) 不要编造原文没有的信息，结论需可追溯到原文。\n"
+        "1) 给出结构化分节总结（按主题归纳）；\n"
+        "2) 不要编造原文没有的信息，结论需可追溯到原文。\n"
         "只输出总结正文，不要输出额外说明。\n\n"
         "原始 Markdown 全文如下：\n"
         f"{full_markdown.strip()}"
