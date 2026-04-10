@@ -4,7 +4,7 @@ import { ElLoading, ElMessage } from 'element-plus'
 const LONG_TASK_TIMEOUT_MS = 6 * 60 * 60 * 1000
 
 const api = axios.create({
-  baseURL: 'http://localhost:5000',
+  baseURL: '/',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json'
@@ -78,8 +78,10 @@ api.interceptors.response.use(
         default:
           message = data?.message || data?.error || `请求失败 (${status})`
       }
+    } else if (error.code === 'ECONNABORTED') {
+      message = '请求超时，请检查服务状态或稍后重试'
     } else if (error.request) {
-      message = '网络连接超时，请检查服务状态'
+      message = `网络连接失败（${error.code || 'ERR_NETWORK'}），请检查服务状态`
     } else {
       message = error.message || '未知错误'
     }
@@ -409,7 +411,10 @@ class ApiService {
   }
 
   static async getStrategyResources(config = {}) {
-    return api.get('/api/strategy-watch/resources', config)
+    return api.get('/api/strategy-watch/resources', {
+      timeout: LONG_TASK_TIMEOUT_MS,
+      ...(config || {})
+    })
   }
 
   static async uploadStrategyResources(formData) {

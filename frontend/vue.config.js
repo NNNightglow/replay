@@ -2,43 +2,46 @@ const { defineConfig } = require('@vue/cli-service')
 
 module.exports = defineConfig({
   transpileDependencies: true,
-  
+
   // 开发服务器配置
   devServer: {
     port: 8081,
     host: '0.0.0.0',
-    open: false,  // 由 start_system.bat 统一控制打开浏览器
-    historyApiFallback: true, // 支持HTML5 History模式
+    open: false, // 由 start_system.bat 统一控制是否打开浏览器
+    historyApiFallback: true, // 支持 HTML5 History 模式
     client: {
       overlay: {
         warnings: false,
         errors: false,
         runtimeErrors: (error) => {
           const ignoreErrors = [
-            "ResizeObserver loop completed with undelivered notifications.",
-            "ResizeObserver loop limit exceeded"
-          ];
-          if (ignoreErrors.some(e => error.message.includes(e))) {
-            return false;
+            'ResizeObserver loop completed with undelivered notifications.',
+            'ResizeObserver loop limit exceeded'
+          ]
+          if (ignoreErrors.some((e) => error.message.includes(e))) {
+            return false
           }
-          return true;
-        },
-      },
+          return true
+        }
+      }
     },
     proxy: {
       '/api': {
-        target: 'http://localhost:5000',
+        target: 'http://127.0.0.1:5000',
         changeOrigin: true,
-        secure: false
+        secure: false,
+        // 上传/转 Markdown 可能耗时较长，避免代理层提前断开
+        timeout: 6 * 60 * 60 * 1000,
+        proxyTimeout: 6 * 60 * 60 * 1000
       }
     }
   },
-  
+
   // 生产环境配置
   publicPath: process.env.NODE_ENV === 'production' ? './' : '/',
   outputDir: 'dist',
   assetsDir: 'static',
-  
+
   // 性能优化
   configureWebpack: {
     optimization: {
@@ -65,15 +68,15 @@ module.exports = defineConfig({
       }
     }
   },
-  
-  // PWA配置
+
+  // PWA 配置
   pwa: {
     name: '股票分析系统',
     themeColor: '#409EFF',
     msTileColor: '#000000',
     appleMobileWebAppCapable: 'yes',
     appleMobileWebAppStatusBarStyle: 'black',
-    
+
     workboxPluginMode: 'InjectManifest',
     workboxOptions: {
       swSrc: 'src/sw.js'

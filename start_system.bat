@@ -63,8 +63,24 @@ if "%FRONT_RUNNING%"=="1" echo.
 echo [1/2] Starting Flask backend (port 5000)...
 start "Flask Backend - Stock Analysis System" cmd /k "cd /d ""%~dp0"" && set RUN_MODE=prod && python flask_app.py"
 
-echo Waiting for backend to start...
-timeout /t 5 /nobreak >nul
+echo Waiting for backend health check (/api/test)...
+set "BACKEND_READY=0"
+for /L %%I in (1,1,30) do (
+    powershell -NoProfile -Command ^
+      "try { $r = Invoke-WebRequest -Uri 'http://127.0.0.1:5000/api/test' -UseBasicParsing -TimeoutSec 2; if ($r.StatusCode -eq 200) { exit 0 } else { exit 1 } } catch { exit 1 }"
+    if not errorlevel 1 (
+        set "BACKEND_READY=1"
+        echo Backend is ready.
+        goto :backend_ready_done
+    )
+    timeout /t 2 /nobreak >nul
+)
+
+:backend_ready_done
+if "%BACKEND_READY%"=="0" (
+    echo WARNING: Backend did not become ready within 60 seconds.
+    echo Frontend will still be started, but proxy errors may appear until backend is ready.
+)
 
 :: Start Vue frontend
 echo [2/2] Starting Vue frontend (port 8081)...

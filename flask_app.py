@@ -28,6 +28,7 @@ os.environ['HTTP_PROXY'] = ''
 os.environ['HTTPS_PROXY'] = ''
 # 导入Flask相关模块
 from flask import Flask, request, jsonify, render_template_string
+from werkzeug.exceptions import RequestEntityTooLarge
 # 使用手动CORS配置，不依赖flask_cors包
 
 # 导入原项目的核心模块
@@ -90,6 +91,32 @@ _configure_console_encoding()
 app = Flask(__name__)
 if strategy_watch_bp is not None:
     app.register_blueprint(strategy_watch_bp)
+
+
+def _read_positive_int_env(name: str, default_value: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default_value
+    try:
+        parsed = int(raw)
+        return parsed if parsed > 0 else default_value
+    except Exception:
+        return default_value
+
+
+# 默认允许 20GB 上传，避免大视频在生产模式（Waitress）下被 1GB 默认上限直接断开。
+MAX_UPLOAD_BYTES = _read_positive_int_env("MAX_UPLOAD_BYTES", 20 * 1024 * 1024 * 1024)
+app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def handle_request_too_large(_error):
+    limit_mb = int(MAX_UPLOAD_BYTES / (1024 * 1024))
+    return jsonify({
+        "success": False,
+        "error": f"上传文件过大，当前后端限制约 {limit_mb} MB。请拆分文件或提高 MAX_UPLOAD_BYTES。",
+        "timestamp": datetime.now().isoformat()
+    }), 413
 
 
 def _hold_on_startup_failure() -> None:
@@ -3922,7 +3949,13 @@ if __name__ == '__main__':
                 print("🚀 生产模式启动（Waitress）")
                 try:
                     from waitress import serve  # type: ignore
-                    serve(app, host="0.0.0.0", port=5000, threads=8)
+                    serve(
+                        app,
+                        host="0.0.0.0",
+                        port=5000,
+                        threads=8,
+                        max_request_body_size=MAX_UPLOAD_BYTES,
+                    )
                 except Exception as exc:
                     print(f"⚠️ Waitress 启动失败，回退至普通模式：{exc}")
                     app.run(
@@ -3933,11 +3966,15 @@ if __name__ == '__main__':
                     )
             else:
                 # 启动Flask应用 - 开发模式
+                # NOTE:
+                # `use_reloader=True` 会监控项目目录文件变化；资料上传会写入 data_cache，
+                # 从而触发后端进程重启，导致前端代理报 ECONNRESET。
+                # 这里默认关闭 reloader，避免上传/转 markdown 请求在传输中被重启打断。
                 app.run(
                     host="0.0.0.0",
                     port=5000,
                     debug=True,
-                    use_reloader=True
+                    use_reloader=False
                 )
         else:
             print("❌ 系统初始化失败，无法启动服务")

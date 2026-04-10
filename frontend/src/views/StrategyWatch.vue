@@ -3684,6 +3684,39 @@ const deleteResource = async (resourceId) => {
   }
 }
 
+const extractApiErrorMessage = async (error, fallback = '操作失败') => {
+  const respData = error?.response?.data
+  if (respData) {
+    if (typeof respData === 'object' && !(respData instanceof Blob)) {
+      return respData.message || respData.error || fallback
+    }
+    if (typeof Blob !== 'undefined' && respData instanceof Blob) {
+      try {
+        const text = await respData.text()
+        if (text) {
+          try {
+            const parsed = JSON.parse(text)
+            return parsed?.message || parsed?.error || text || fallback
+          } catch {
+            return text || fallback
+          }
+        }
+      } catch {
+        // ignore blob parse errors and fallback below
+      }
+    }
+    if (typeof respData === 'string') {
+      try {
+        const parsed = JSON.parse(respData)
+        return parsed?.message || parsed?.error || respData || fallback
+      } catch {
+        return respData || fallback
+      }
+    }
+  }
+  return error?.message || fallback
+}
+
 const downloadResourceMarkdown = async (resource) => {
   if (!resource?.id) return
   try {
@@ -3725,6 +3758,7 @@ const downloadResourceAiSummary = async (resource) => {
     URL.revokeObjectURL(url)
   } catch (error) {
     console.error(error)
+    ElMessage.error(await extractApiErrorMessage(error, '下载原始 Markdown 失败'))
   }
 }
 
@@ -3759,6 +3793,7 @@ const downloadCrawl = async (item, format) => {
     URL.revokeObjectURL(url)
   } catch (error) {
     console.error(error)
+    ElMessage.error(await extractApiErrorMessage(error, '下载 AI 总结失败'))
   }
 }
 

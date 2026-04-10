@@ -1031,10 +1031,14 @@ def _load_resources_payload() -> Dict:
         if isinstance(item, dict):
             normalized_item = _normalize_resource_record(item)
             md_rel = (normalized_item.get("markdown_relpath") or "").strip()
+            source_type = (normalized_item.get("source_type") or "").strip().lower()
+            content_time = (normalized_item.get("content_time") or "").strip()
+            content_time_type = (normalized_item.get("content_time_type") or "").strip().lower()
+            published_at = (normalized_item.get("published_at") or "").strip()
             should_probe_markdown = (
-                (not normalized_item.get("content_time"))
-                or (normalized_item.get("content_time_type") in {"unknown", "inferred_filename"})
-                or (not normalized_item.get("published_at"))
+                (not content_time)
+                or (content_time_type == "unknown")
+                or (source_type == "url" and not published_at)
             )
             if should_probe_markdown and md_rel:
                 md_text = _read_markdown_text_by_relpath(md_rel)
@@ -3286,6 +3290,16 @@ def list_strategy_resources():
 
 @strategy_watch_bp.route("/api/strategy-watch/resources", methods=["POST"])
 def upload_strategy_resources():
+    start_ts = time.time()
+    try:
+        req_len = int(request.content_length or 0)
+    except Exception:
+        req_len = 0
+    try:
+        print(f"[strategy-watch] upload request in, content_length={req_len}")
+    except Exception:
+        pass
+
     if "files" not in request.files:
         return jsonify({"success": False, "error": "请通过 files 字段上传文件。", "timestamp": _now_iso()}), 400
 
@@ -3403,6 +3417,14 @@ def upload_strategy_resources():
             daemon=True,
         )
         worker.start()
+
+    try:
+        cost_ms = int((time.time() - start_ts) * 1000)
+        print(
+            f"[strategy-watch] upload accepted, files={len(uploaded)}, rejected={len(rejected)}, jobs={len(jobs)}, cost_ms={cost_ms}"
+        )
+    except Exception:
+        pass
 
     return jsonify(
         {
