@@ -348,9 +348,11 @@ class ApiService {
 
   static async streamStrategyMessage(conversationId, payload, handlers = {}) {
     const { onMeta, onDelta, onDone, onError } = handlers
-    const baseURL = api.defaults.baseURL || ''
+    const baseURL = String(api.defaults.baseURL || '').replace(/\/+$/, '')
+    const endpoint = `/api/strategy-watch/conversations/${conversationId}/messages/stream`
+    const requestUrl = new URL(`${baseURL}${endpoint}`, window.location.origin).toString()
     const res = await fetch(
-      `${baseURL}/api/strategy-watch/conversations/${conversationId}/messages/stream`,
+      requestUrl,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -395,7 +397,8 @@ class ApiService {
       while (true) {
         const { value, done } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
+        // Flask SSE often uses CRLF separators; normalize to LF for stable parsing.
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, '\n')
         let idx
         while ((idx = buffer.indexOf('\n\n')) !== -1) {
           const eventText = buffer.slice(0, idx)
@@ -437,6 +440,14 @@ class ApiService {
 
   static async createStrategyResourceGroup(groupName) {
     return api.post('/api/strategy-watch/resource-groups', { group_name: groupName })
+  }
+
+  static async getStrategyResourceGroupImpact(groupId) {
+    return api.get(`/api/strategy-watch/resource-groups/${groupId}/impact`)
+  }
+
+  static async deleteStrategyResourceGroup(groupId, payload = {}) {
+    return api.delete(`/api/strategy-watch/resource-groups/${groupId}`, { data: payload })
   }
 
   static async transferStrategyResourceGroup(payload) {
@@ -515,6 +526,12 @@ class ApiService {
 
   static async getMemoryProfiles() {
     return api.get('/api/strategy-watch/memory-profiles')
+  }
+
+  static async syncMemoryProfilesFromPersonaFolder(folder = '') {
+    return api.post('/api/strategy-watch/memory-profiles/sync-persona', {
+      folder: folder || ''
+    })
   }
 
   static async createMemoryProfile(payload = {}) {

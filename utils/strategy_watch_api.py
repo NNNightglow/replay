@@ -46,6 +46,10 @@ STRATEGY_INDEX_FILE = STRATEGY_ROOT_DIR / "strategies_index.json"
 MEMORY_PROFILES_FILE = MEMORY_DIR / "memory_profiles.json"
 MEMORY_LINKS_FILE = MEMORY_DIR / "memory_links.json"
 MEMORY_PORTRAITS_FILE = MEMORY_DIR / "memory_portraits.json"
+PERSONA_MEMORY_ROOT_CANDIDATES = [
+    MEMORY_DIR / "persona",
+    MEMORY_DIR / "人格",
+]
 AGENT_LOGS_DIR = STORE_DIR / "logs"
 LEGACY_AGENT_LOGS_FILE = STORE_DIR / "agent_logs.jsonl"
 
@@ -74,6 +78,16 @@ CONVERSATION_MODE_AGENT_MAP = {
 _DATE_YMD_SEP_PATTERN = re.compile(r"(?<!\d)(20\d{2})[-./年](\d{1,2})[-./月](\d{1,2})(?:日)?(?!\d)")
 _DATE_YMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)")
 _DATE_YYMD_COMPACT_PATTERN = re.compile(r"(?<!\d)(\d{2})(\d{2})(\d{2})(?!\d)")
+
+NUWA_PORTRAIT_EXTRACTION_RULES = (
+    "1) 心智模型识别：提炼 3-7 个可运行的核心认知模型；每个模型至少满足“跨场景复现 + "
+    "可用于新问题推断 + 具区分度”中的多数条件；证据不足时降级为启发式规则。\n"
+    "2) 表达 DNA：提炼语气、句式、词汇偏好、禁忌表达，避免过度模仿成口头禅堆砌。\n"
+    "3) 矛盾处理：保留时间演化、领域差异、价值张力，不要强行调和矛盾。\n"
+    "4) 不确定性处理：信息不足必须明确写出“信息不足/推测”，不得臆测补全。\n"
+    "5) 证据可追溯：每条核心结论尽量关联 evidence_refs，quote 优先短原文，"
+    "并补全 resource_id/source_time/timecode。"
+)
 
 _STORE_LOCK = threading.Lock()
 _JOB_LOCK = threading.Lock()
@@ -333,7 +347,11 @@ def _read_json(path: Path, default):
     if not path.exists():
         return default
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        text = path.read_text(encoding="utf-8")
+        # Be tolerant to UTF-8 BOM produced by some editors/PowerShell variants.
+        if text.startswith("\ufeff"):
+            text = text.lstrip("\ufeff")
+        return json.loads(text)
     except Exception:
         return default
 
@@ -1326,6 +1344,9 @@ def _normalize_memory_profile_record(profile: Dict) -> Dict:
         normalized_subs.append(sub)
     created_at = (profile.get("created_at") or _now_iso()).strip()
     updated_at = (profile.get("updated_at") or created_at).strip()
+    external_source = (profile.get("external_source") or "").strip()
+    external_profile_dir = (profile.get("external_profile_dir") or "").strip()
+    external_updated_at = (profile.get("external_updated_at") or "").strip()
     return {
         "id": normalized_id,
         "name": (profile.get("name") or "").strip() or normalized_id,
@@ -1334,6 +1355,9 @@ def _normalize_memory_profile_record(profile: Dict) -> Dict:
         "created_at": created_at,
         "updated_at": updated_at,
         "group_subscriptions": normalized_subs,
+        "external_source": external_source,
+        "external_profile_dir": external_profile_dir,
+        "external_updated_at": external_updated_at,
     }
 
 
@@ -1533,6 +1557,399 @@ def _save_memory_portraits(portraits: Dict[str, Dict]) -> None:
         if normalized:
             records.append(normalized)
     _write_json(MEMORY_PORTRAITS_FILE, {"portraits": records})
+
+
+def _strip_markdown_frontmatter(text: str) -> str:
+    raw = str(text or "")
+    if not raw.startswith("---"):
+        return raw
+    parts = raw.split("---", 2)
+    if len(parts) < 3:
+        return raw
+    return parts[2].lstrip("\n")
+
+
+def _split_markdown_h2_sections(text: str) -> Dict[str, str]:
+    body = _strip_markdown_frontmatter(text)
+    sections: Dict[str, str] = {}
+    current_title = ""
+    buf: List[str] = []
+    for line in body.splitlines():
+        if line.startswith("## "):
+            if current_title:
+                sections[current_title] = "\n".join(buf).strip()
+            current_title = line[3:].strip()
+            buf = []
+            continue
+        if current_title:
+            buf.append(line)
+    if current_title:
+        sections[current_title] = "\n".join(buf).strip()
+    return sections
+
+
+def _extract_persona_name_from_skill(skill_text: str, fallback: str) -> str:
+    body = _strip_markdown_frontmatter(skill_text or "")
+    m = re.search(r"(?m)^#\s+(.+?)\s*$", body)
+    if m:
+        title = (m.group(1) or "").strip()
+        if "·" in title:
+            title = title.split("·", 1)[0].strip()
+        if title:
+            return title
+    return (fallback or "").strip() or "未命名人格"
+
+
+def _extract_persona_description_from_skill(skill_text: str) -> str:
+    body = _strip_markdown_frontmatter(skill_text or "")
+    for line in body.splitlines():
+        raw = line.strip()
+        if raw.startswith(">"):
+            text = raw.lstrip(">").strip()
+            if text:
+                return text
+    return ""
+
+
+def _build_persona_portrait_seed_from_skill(skill_text: str) -> Dict[str, str]:
+    sections = _split_markdown_h2_sections(skill_text or "")
+
+    def _join_by_keywords(*keywords: str) -> str:
+        blocks: List[str] = []
+        for title, content in sections.items():
+            if not content:
+                continue
+            if any(k in title for k in keywords):
+                blocks.append(f"### {title}\n{content.strip()}")
+        return "\n\n".join(blocks).strip()
+
+    return {
+        "methodology": _join_by_keywords("回答工作流", "复盘经验", "方法论"),
+        "tactics": _join_by_keywords("四象限", "决策启发式", "交易手法"),
+        "views": _join_by_keywords("四象限", "决策启发式", "观点"),
+        "operations": _join_by_keywords("回答工作流", "复盘经验", "交易操作"),
+        "risk_rules": _join_by_keywords("角色规则", "风控", "边界"),
+        "style_constraints": _join_by_keywords("表达DNA", "角色规则", "风格"),
+    }
+
+
+def _list_persona_skill_dirs(target_folder: str = "") -> List[Path]:
+    target = (target_folder or "").strip()
+    out: List[Path] = []
+    seen = set()
+    for root in PERSONA_MEMORY_ROOT_CANDIDATES:
+        if not root.exists() or not root.is_dir():
+            continue
+        for child in sorted(root.iterdir(), key=lambda p: p.name.lower()):
+            if not child.is_dir():
+                continue
+            if target and child.name != target:
+                continue
+            if not (child / "SKILL.md").exists():
+                continue
+            key = child.name.lower()
+            # Prefer earlier roots in PERSONA_MEMORY_ROOT_CANDIDATES (persona first).
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(child)
+    return out
+
+
+def _ensure_persona_resources(
+    resources_payload: Dict,
+    persona_dir: Path,
+    display_name: str,
+) -> Tuple[List[str], str, int]:
+    resources = resources_payload.get("resources", [])
+    groups = resources_payload.get("groups", [])
+    group_name = f"人格/{display_name}"
+    group_id = _resolve_group_id_by_name(resources, group_name, groups)
+    if not group_id:
+        group_id = _gen_id("group")
+        groups.append({"group_id": group_id, "group_name": group_name, "updated_at": _now_iso()})
+
+    persona_relname = persona_dir.name
+    linked_resource_ids: List[str] = []
+    added_count = 0
+
+    for src in sorted(persona_dir.rglob("*.md"), key=lambda p: p.as_posix().lower()):
+        if not src.exists() or not src.is_file():
+            continue
+        try:
+            rel_source = src.relative_to(BASE_DIR).as_posix()
+            rel_inside = src.relative_to(persona_dir).as_posix()
+        except Exception:
+            continue
+
+        text = src.read_text(encoding="utf-8", errors="ignore")
+        if not text.strip():
+            continue
+
+        existing = next(
+            (item for item in resources if (item.get("source_relpath") or "").strip() == rel_source),
+            None,
+        )
+        if existing:
+            rid = (existing.get("id") or "").strip() or _gen_id("res")
+            existing["id"] = rid
+            md_rel = (existing.get("markdown_relpath") or "").strip()
+            if not md_rel:
+                dst_md = (MARKDOWN_DIR / _markdown_filename(rid, f"{persona_relname}_{rel_inside}")).resolve()
+                md_rel = dst_md.relative_to(BASE_DIR).as_posix()
+                existing["markdown_relpath"] = md_rel
+            md_path = (BASE_DIR / md_rel).resolve()
+            md_path.parent.mkdir(parents=True, exist_ok=True)
+            md_path.write_text(text, encoding="utf-8")
+
+            existing["original_name"] = f"{display_name}/{rel_inside}"
+            existing["extension"] = ".md"
+            existing["size_bytes"] = len(text.encode("utf-8"))
+            existing["status"] = "ok"
+            existing["error"] = ""
+            existing["source_type"] = "persona_skill"
+            existing["source_relpath"] = rel_source
+            existing["group_id"] = group_id
+            existing["group_name"] = group_name
+            existing["strategy_id"] = (existing.get("strategy_id") or "").strip()
+            existing["strategy_name"] = (existing.get("strategy_name") or "").strip()
+            _normalize_resource_record(existing)
+            linked_resource_ids.append(rid)
+            continue
+
+        rid = _gen_id("res")
+        dst_md = (MARKDOWN_DIR / _markdown_filename(rid, f"{persona_relname}_{rel_inside}")).resolve()
+        dst_md.parent.mkdir(parents=True, exist_ok=True)
+        dst_md.write_text(text, encoding="utf-8")
+        md_rel = dst_md.relative_to(BASE_DIR).as_posix()
+        uploaded_at = _now_iso()
+
+        record = {
+            "id": rid,
+            "original_name": f"{display_name}/{rel_inside}",
+            "stored_name": dst_md.name,
+            "extension": ".md",
+            "size_bytes": len(text.encode("utf-8")),
+            "uploaded_at": uploaded_at,
+            "status": "ok",
+            "error": "",
+            "source_type": "persona_skill",
+            "source_relpath": rel_source,
+            "markdown_relpath": md_rel,
+            "group_id": group_id,
+            "group_name": group_name,
+            "progress": 0,
+            "progress_message": "",
+            "strategy_id": "",
+            "strategy_name": "",
+            "published_at": "",
+            "content_time": "",
+            "content_time_type": "unknown",
+            "content_time_confidence": 0.0,
+            "content_time_evidence": "",
+        }
+        record = _normalize_resource_record(record)
+        resources.append(record)
+        linked_resource_ids.append(rid)
+        added_count += 1
+
+    resources_payload["resources"] = resources
+    resources_payload["groups"] = _normalize_group_records(groups)
+    return linked_resource_ids, group_id, added_count
+
+
+def _sync_persona_profiles_from_fs(target_folder: str = "") -> Dict[str, Any]:
+    persona_dirs = _list_persona_skill_dirs(target_folder)
+    if not persona_dirs:
+        return {
+            "requested_folder": (target_folder or "").strip(),
+            "processed": 0,
+            "created_profiles": 0,
+            "linked_resources": 0,
+            "added_resources": 0,
+            "details": [],
+        }
+
+    profiles_payload = _load_memory_profiles_payload()
+    portraits = _load_memory_portraits()
+    resources_payload = _load_resources_payload()
+    links = _load_memory_links()
+    profiles = profiles_payload.get("profiles", [])
+    active_profile_id = (profiles_payload.get("active_profile_id") or "").strip()
+    link_set = {
+        ((item.get("profile_id") or "").strip(), (item.get("resource_id") or "").strip())
+        for item in links
+        if isinstance(item, dict)
+    }
+
+    created_profiles = 0
+    linked_resources = 0
+    added_resources_total = 0
+    details: List[Dict[str, Any]] = []
+    profiles_changed = False
+    portraits_changed = False
+    links_changed = False
+    resources_changed = False
+
+    for persona_dir in persona_dirs:
+        skill_path = persona_dir / "SKILL.md"
+        if not skill_path.exists():
+            continue
+        skill_text = skill_path.read_text(encoding="utf-8", errors="ignore")
+        if not skill_text.strip():
+            continue
+
+        folder_name = persona_dir.name
+        folder_rel = persona_dir.relative_to(BASE_DIR).as_posix()
+        display_name = _extract_persona_name_from_skill(skill_text, folder_name)
+        description = _extract_persona_description_from_skill(skill_text)
+        seed_portrait = _build_persona_portrait_seed_from_skill(skill_text)
+
+        profile = next(
+            (
+                item
+                for item in profiles
+                if (item.get("external_profile_dir") or "").strip() == folder_rel
+            ),
+            None,
+        )
+        if not profile:
+            profile = next(
+                (item for item in profiles if (item.get("name") or "").strip() == display_name),
+                None,
+            )
+
+        if not profile:
+            base_id = _normalize_strategy_id(f"mp_fs_{folder_name}", allow_empty=True) or _gen_id("mp")
+            candidate_id = base_id
+            counter = 2
+            used_ids = {str(item.get("id") or "").strip() for item in profiles}
+            while candidate_id in used_ids:
+                candidate_id = f"{base_id}_{counter}"
+                counter += 1
+            profile = {
+                "id": candidate_id,
+                "name": display_name,
+                "description": description,
+                "source_blogger": display_name,
+                "group_subscriptions": [],
+                "created_at": _now_iso(),
+                "updated_at": _now_iso(),
+                "external_source": "persona_folder",
+                "external_profile_dir": folder_rel,
+                "external_updated_at": _now_iso(),
+            }
+            profiles.append(profile)
+            created_profiles += 1
+            profiles_changed = True
+            if not active_profile_id:
+                active_profile_id = candidate_id
+        else:
+            changed = False
+            if (profile.get("name") or "").strip() != display_name:
+                profile["name"] = display_name
+                changed = True
+            if description and not (profile.get("description") or "").strip():
+                profile["description"] = description
+                changed = True
+            if not (profile.get("source_blogger") or "").strip():
+                profile["source_blogger"] = display_name
+                changed = True
+            if (profile.get("external_source") or "").strip() != "persona_folder":
+                profile["external_source"] = "persona_folder"
+                changed = True
+            if (profile.get("external_profile_dir") or "").strip() != folder_rel:
+                profile["external_profile_dir"] = folder_rel
+                changed = True
+            if changed:
+                profile["updated_at"] = _now_iso()
+                profiles_changed = True
+            profile["external_updated_at"] = _now_iso()
+
+        pid = (profile.get("id") or "").strip()
+        portrait = portraits.get(pid) or _default_memory_portrait(pid)
+        portrait_changed = False
+        can_override = (portrait.get("updated_by") or "").strip() in {"", "skill_sync", "ai_draft"}
+        for key in ("methodology", "tactics", "views", "operations", "risk_rules", "style_constraints"):
+            candidate_text = (seed_portrait.get(key) or "").strip()
+            if not candidate_text:
+                continue
+            current_text = (portrait.get(key) or "").strip()
+            if not current_text or can_override:
+                if current_text != candidate_text:
+                    portrait[key] = candidate_text
+                    portrait_changed = True
+        if portrait_changed:
+            portrait["updated_at"] = _now_iso()
+            portrait["updated_by"] = "skill_sync"
+            portraits[pid] = portrait
+            portraits_changed = True
+        else:
+            portraits.setdefault(pid, portrait)
+
+        persona_resource_ids, group_id, added_resources = _ensure_persona_resources(
+            resources_payload=resources_payload,
+            persona_dir=persona_dir,
+            display_name=display_name,
+        )
+        if added_resources:
+            resources_changed = True
+        added_resources_total += added_resources
+
+        link_added = 0
+        for rid in persona_resource_ids:
+            key = (pid, rid)
+            if key in link_set:
+                continue
+            links.append(
+                {
+                    "profile_id": pid,
+                    "resource_id": rid,
+                    "bind_source": "group",
+                    "group_id": group_id,
+                    "added_at": _now_iso(),
+                }
+            )
+            link_set.add(key)
+            link_added += 1
+        if link_added:
+            linked_resources += link_added
+            links_changed = True
+
+        if _upsert_profile_subscription(profile, group_id, sync_now=True):
+            profiles_changed = True
+
+        details.append(
+            {
+                "folder": folder_name,
+                "profile_id": pid,
+                "profile_name": display_name,
+                "resource_total": len(persona_resource_ids),
+                "resource_added": added_resources,
+                "link_added": link_added,
+            }
+        )
+
+    profiles_payload["profiles"] = profiles
+    profiles_payload["active_profile_id"] = active_profile_id
+
+    if profiles_changed:
+        _save_memory_profiles_payload(profiles_payload)
+    if portraits_changed:
+        _save_memory_portraits(portraits)
+    if resources_changed:
+        _save_resources_payload(resources_payload)
+    if links_changed:
+        _save_memory_links(links)
+
+    return {
+        "requested_folder": (target_folder or "").strip(),
+        "processed": len(details),
+        "created_profiles": created_profiles,
+        "linked_resources": linked_resources,
+        "added_resources": added_resources_total,
+        "details": details,
+    }
 
 
 def _find_memory_profile(profile_id: str) -> Optional[Dict]:
@@ -3718,6 +4135,252 @@ def rename_strategy_resource_group(group_id: str):
     )
 
 
+@strategy_watch_bp.route("/api/strategy-watch/resource-groups/<string:group_id>/impact", methods=["GET"])
+def preview_strategy_resource_group_impact(group_id: str):
+    gid = (group_id or "").strip()
+    if not gid:
+        return jsonify({"success": False, "error": "缺少 group_id", "timestamp": _now_iso()}), 400
+
+    with _STORE_LOCK:
+        resources_payload = _load_resources_payload()
+        resources = resources_payload.get("resources", [])
+        groups = resources_payload.get("groups", [])
+        source_items = [item for item in resources if (item.get("group_id") or "").strip() == gid]
+        group_rec = next((item for item in groups if (item.get("group_id") or "").strip() == gid), None)
+        if not source_items and not group_rec:
+            return jsonify({"success": False, "error": "分组不存在", "timestamp": _now_iso()}), 404
+
+        group_name = (
+            ((group_rec or {}).get("group_name") or "").strip()
+            or ((source_items[0] if source_items else {}).get("group_name") or "").strip()
+            or gid
+        )
+        source_ids = {(item.get("id") or "").strip() for item in source_items if (item.get("id") or "").strip()}
+        strategy_ids = {
+            (item.get("strategy_id") or "").strip()
+            for item in source_items
+            if (item.get("strategy_id") or "").strip()
+        }
+        active_resource_id = (resources_payload.get("active_resource_id") or "").strip()
+        active_in_group = active_resource_id in source_ids if active_resource_id else False
+
+        memory_profiles_payload = _load_memory_profiles_payload()
+        profiles = memory_profiles_payload.get("profiles", [])
+        subscription_profile_ids = []
+        for profile in profiles:
+            subs = profile.get("group_subscriptions") if isinstance(profile.get("group_subscriptions"), list) else []
+            if any((sub.get("group_id") or "").strip() == gid for sub in subs if isinstance(sub, dict)):
+                pid = (profile.get("id") or "").strip()
+                if pid:
+                    subscription_profile_ids.append(pid)
+
+        links = _load_memory_links()
+        profile_ids_by_group = {
+            (link.get("profile_id") or "").strip()
+            for link in links
+            if (link.get("group_id") or "").strip() == gid and (link.get("profile_id") or "").strip()
+        }
+        profile_ids_by_resource = {
+            (link.get("profile_id") or "").strip()
+            for link in links
+            if (link.get("resource_id") or "").strip() in source_ids and (link.get("profile_id") or "").strip()
+        }
+        link_count_by_resource = sum(
+            1 for link in links if (link.get("resource_id") or "").strip() in source_ids
+        )
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "group_id": gid,
+                "group_name": group_name,
+                "resource_count": len(source_ids),
+                "active_resource_in_group": active_in_group,
+                "strategy_count": len(strategy_ids),
+                "strategy_ids": sorted(strategy_ids),
+                "memory_subscription_profile_count": len(set(subscription_profile_ids)),
+                "memory_subscription_profile_ids": sorted(set(subscription_profile_ids)),
+                "memory_link_profile_count": len(profile_ids_by_group | profile_ids_by_resource),
+                "memory_link_profile_ids": sorted(profile_ids_by_group | profile_ids_by_resource),
+                "memory_link_count_by_resources": link_count_by_resource,
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/resource-groups/<string:group_id>", methods=["DELETE"])
+def delete_strategy_resource_group(group_id: str):
+    gid = (group_id or "").strip()
+    if not gid:
+        return jsonify({"success": False, "error": "缺少 group_id", "timestamp": _now_iso()}), 400
+
+    payload = request.get_json(silent=True) or {}
+    action = (payload.get("action") or "move_to_default").strip().lower()
+    if action not in {"move_to_default", "move_to_group", "delete_resources"}:
+        return jsonify(
+            {
+                "success": False,
+                "error": "action 必须为 move_to_default / move_to_group / delete_resources",
+                "timestamp": _now_iso(),
+            }
+        ), 400
+
+    remove_subscriptions = bool(payload.get("remove_subscriptions", True))
+    target_group_id = (payload.get("target_group_id") or "").strip()
+    target_group_name = (payload.get("target_group_name") or "").strip()
+
+    with _STORE_LOCK:
+        resources_payload = _load_resources_payload()
+        resources = resources_payload.get("resources", [])
+        groups = resources_payload.get("groups", [])
+        source_items = [item for item in resources if (item.get("group_id") or "").strip() == gid]
+        group_rec = next((item for item in groups if (item.get("group_id") or "").strip() == gid), None)
+        if not source_items and not group_rec:
+            return jsonify({"success": False, "error": "分组不存在", "timestamp": _now_iso()}), 404
+
+        source_group_name = (
+            ((group_rec or {}).get("group_name") or "").strip()
+            or ((source_items[0] if source_items else {}).get("group_name") or "").strip()
+            or gid
+        )
+        moved = 0
+        deleted = 0
+        target_name = ""
+        resolved_target_group_id = ""
+        removed_resource_ids: set = set()
+
+        if action == "move_to_group":
+            if not target_group_id and not target_group_name:
+                return jsonify({"success": False, "error": "缺少目标分组", "timestamp": _now_iso()}), 400
+            if target_group_id:
+                target_name = next(
+                    (
+                        item.get("group_name")
+                        for item in groups
+                        if (item.get("group_id") or "").strip() == target_group_id
+                    ),
+                    "",
+                ).strip()
+                if not target_name:
+                    target_name = next(
+                        (
+                            item.get("group_name")
+                            for item in resources
+                            if (item.get("group_id") or "").strip() == target_group_id
+                        ),
+                        "",
+                    ).strip()
+                if not target_name:
+                    return jsonify({"success": False, "error": "目标分组不存在", "timestamp": _now_iso()}), 404
+                resolved_target_group_id = target_group_id
+            else:
+                existing_id, _ = _find_group_by_name(resources, target_group_name, groups)
+                if existing_id:
+                    resolved_target_group_id = existing_id
+                    target_name = target_group_name
+                else:
+                    resolved_target_group_id = _gen_id("group")
+                    target_name = target_group_name
+
+            if resolved_target_group_id == gid:
+                return jsonify({"success": False, "error": "源分组与目标分组相同", "timestamp": _now_iso()}), 400
+
+            for item in resources:
+                if (item.get("group_id") or "").strip() == gid:
+                    item["group_id"] = resolved_target_group_id
+                    item["group_name"] = target_name
+                    moved += 1
+
+            if not any((item.get("group_id") or "").strip() == resolved_target_group_id for item in groups):
+                groups.append(
+                    {
+                        "group_id": resolved_target_group_id,
+                        "group_name": target_name,
+                        "updated_at": _now_iso(),
+                    }
+                )
+
+        elif action == "move_to_default":
+            resolved_target_group_id = f"legacy_{DEFAULT_GROUP_NAME}"
+            target_name = DEFAULT_GROUP_NAME
+            for item in resources:
+                if (item.get("group_id") or "").strip() == gid:
+                    item["group_id"] = resolved_target_group_id
+                    item["group_name"] = target_name
+                    moved += 1
+        else:
+            removed_resource_ids = {
+                (item.get("id") or "").strip()
+                for item in resources
+                if (item.get("group_id") or "").strip() == gid and (item.get("id") or "").strip()
+            }
+            resources = [item for item in resources if (item.get("group_id") or "").strip() != gid]
+            deleted = len(removed_resource_ids)
+            active_resource_id = (resources_payload.get("active_resource_id") or "").strip()
+            if active_resource_id and active_resource_id in removed_resource_ids:
+                resources_payload["active_resource_id"] = ""
+
+        # Drop source group record from manual group list.
+        groups = [item for item in groups if (item.get("group_id") or "").strip() != gid]
+
+        resources_payload["resources"] = resources
+        resources_payload["groups"] = groups
+        _save_resources_payload(resources_payload)
+
+        memory_links_removed = 0
+        if removed_resource_ids:
+            links = _load_memory_links()
+            kept_links = [
+                link for link in links if (link.get("resource_id") or "").strip() not in removed_resource_ids
+            ]
+            memory_links_removed = len(links) - len(kept_links)
+            if memory_links_removed:
+                _save_memory_links(kept_links)
+
+        subscriptions_removed = 0
+        if remove_subscriptions:
+            profiles_payload = _load_memory_profiles_payload()
+            changed = False
+            for profile in profiles_payload.get("profiles", []):
+                subs = profile.get("group_subscriptions") if isinstance(profile.get("group_subscriptions"), list) else []
+                kept_subs = []
+                removed_this_profile = 0
+                for sub in subs:
+                    if not isinstance(sub, dict):
+                        continue
+                    if (sub.get("group_id") or "").strip() == gid:
+                        removed_this_profile += 1
+                        continue
+                    kept_subs.append(sub)
+                if removed_this_profile:
+                    profile["group_subscriptions"] = kept_subs
+                    profile["updated_at"] = _now_iso()
+                    subscriptions_removed += removed_this_profile
+                    changed = True
+            if changed:
+                _save_memory_profiles_payload(profiles_payload)
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "group_id": gid,
+                "group_name": source_group_name,
+                "action": action,
+                "target_group_id": resolved_target_group_id,
+                "target_group_name": target_name,
+                "moved": moved,
+                "deleted": deleted,
+                "memory_links_removed": memory_links_removed,
+                "subscriptions_removed": subscriptions_removed,
+            },
+            "timestamp": _now_iso(),
+        }
+    )
+
+
 @strategy_watch_bp.route("/api/strategy-watch/resource-groups/transfer", methods=["POST"])
 def transfer_strategy_resource_group():
     payload = request.get_json(silent=True) or {}
@@ -3973,6 +4636,7 @@ def set_active_strategy_resource():
 @strategy_watch_bp.route("/api/strategy-watch/memory-profiles", methods=["GET"])
 def list_memory_profiles():
     with _STORE_LOCK:
+        _sync_persona_profiles_from_fs()
         payload = _load_memory_profiles_payload()
         profiles = payload.get("profiles", [])
         active_profile_id = payload.get("active_profile_id") or ""
@@ -3990,6 +4654,15 @@ def list_memory_profiles():
             "timestamp": _now_iso(),
         }
     )
+
+
+@strategy_watch_bp.route("/api/strategy-watch/memory-profiles/sync-persona", methods=["POST"])
+def sync_memory_profiles_from_persona_folder():
+    payload = request.get_json(silent=True) or {}
+    folder = (payload.get("folder") or "").strip()
+    with _STORE_LOCK:
+        result = _sync_persona_profiles_from_fs(folder)
+    return jsonify({"success": True, "data": result, "timestamp": _now_iso()})
 
 
 @strategy_watch_bp.route("/api/strategy-watch/memory-profiles", methods=["POST"])
@@ -4207,6 +4880,16 @@ def extract_memory_portrait_draft(profile_id: str):
 
     prompt = (
         "请基于资料生成人物侧写初稿，并返回 JSON（不要输出其他文字）。\n"
+        "目标：提炼可运行的交易认知框架，而不是简单摘要。\n\n"
+        "提炼规范（nuwa-skill，必须遵守）:\n"
+        f"{NUWA_PORTRAIT_EXTRACTION_RULES}\n\n"
+        "映射要求：\n"
+        "- methodology: 核心方法论与心智模型\n"
+        "- tactics: 可执行交易手法与触发条件\n"
+        "- views: 市场/板块/风格判断框架\n"
+        "- operations: 仓位、节奏、执行动作\n"
+        "- risk_rules: 风险边界、止损/减仓规则\n"
+        "- style_constraints: 表达 DNA + 行为约束 + 禁忌项\n\n"
         "JSON 字段:\n"
         "{\n"
         '  "methodology": "交易方法论",\n'
@@ -4218,7 +4901,7 @@ def extract_memory_portrait_draft(profile_id: str):
         '  "evidence_refs": [\n'
         "    {\n"
         '      "resource_id": "res_xxx",\n'
-        '      "topic": "观点|操作|方法论|手法",\n'
+        '      "topic": "观点|操作|方法论|手法|风控|表达约束",\n'
         '      "quote": "关键证据原文",\n'
         '      "source_time": "YYYY-MM-DD",\n'
         '      "source_time_type": "published|recorded|inferred_filename|inferred_text",\n'
@@ -4226,7 +4909,8 @@ def extract_memory_portrait_draft(profile_id: str):
         "    }\n"
         "  ]\n"
         "}\n"
-        "要求：证据尽量可追溯，source_time 优先使用资料内容时间。"
+        "要求：证据尽量可追溯，source_time 优先使用资料内容时间；"
+        "若存在冲突观点，请在 views/risk_rules 中显式写出分歧条件。"
     )
 
     extra_context = (
@@ -4234,6 +4918,20 @@ def extract_memory_portrait_draft(profile_id: str):
         f"人格说明: {(profile.get('description') or '').strip()}\n"
         f"来源博主: {(profile.get('source_blogger') or '').strip()}"
     )
+    seed_blocks: List[str] = []
+    for title, key in (
+        ("交易方法论", "methodology"),
+        ("交易手法", "tactics"),
+        ("观点", "views"),
+        ("交易操作", "operations"),
+        ("风控规则", "risk_rules"),
+        ("风格约束", "style_constraints"),
+    ):
+        text = (portrait.get(key) or "").strip()
+        if text:
+            seed_blocks.append(f"## {title}\n{text}")
+    if seed_blocks:
+        extra_context += "\n\n当前已有人格模板骨架（可修订优化，不可无视）:\n\n" + "\n\n".join(seed_blocks)
     requested_model = (payload.get("model") or "").strip()
     portrait_model = _canonical_model_name(
         requested_model
@@ -4253,6 +4951,7 @@ def extract_memory_portrait_draft(profile_id: str):
                 "entrypoint": "extract_memory_portrait_draft",
                 "profile_id": profile_id,
                 "agent_name": "analyst_agent",
+                "portrait_framework": "nuwa_skill",
             },
         )
     except Exception as exc:

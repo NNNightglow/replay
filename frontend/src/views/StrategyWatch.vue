@@ -698,9 +698,9 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="resourceManageVisible" title="资料库管理" width="820px">
+    <el-dialog v-model="resourceManageVisible" title="资料库管理" width="980px">
       <div class="manage-toolbar">
-        <el-select v-model="manageFilterGroupId" size="small" style="width: 160px" placeholder="筛选分组">
+        <el-select v-model="manageFilterGroupId" size="small" style="width: 200px" placeholder="筛选分组">
           <el-option label="所有分组" value="" />
           <el-option
             v-for="grp in resourceGroups"
@@ -709,45 +709,15 @@
             :value="grp.group_id"
           />
         </el-select>
-        <el-button size="small" type="primary" plain @click="createManageGroup">新建分组</el-button>
-        <el-button size="small" :disabled="!manageFilterGroupId" @click="renameManageGroup">重命名分组</el-button>
-        <el-select v-model="manageTargetGroupId" size="small" style="width: 160px" placeholder="目标分组">
-          <el-option
-            v-for="grp in resourceGroups"
-            :key="grp.group_id"
-            :label="`${grp.group_name} (${grp.count})`"
-            :value="grp.group_id"
-          />
-        </el-select>
         <el-input
-          v-model="manageTargetGroupName"
+          v-model="manageKeyword"
           size="small"
-          placeholder="或输入新分组名称"
-          style="width: 180px"
-          :disabled="!!manageTargetGroupId"
+          clearable
+          placeholder="搜索资料名称"
+          style="width: 220px"
         />
-        <el-radio-group v-model="manageMode" size="small">
-          <el-radio-button label="move">移动</el-radio-button>
-          <el-radio-button label="copy">复制</el-radio-button>
-        </el-radio-group>
-        <el-button
-          type="primary"
-          size="small"
-          :disabled="!manageSelectedIds.length"
-          @click="submitResourceTransfer"
-        >
-          应用到选中
-        </el-button>
-        <el-button
-          type="danger"
-          size="small"
-          :disabled="!manageSelectedIds.length"
-          @click="batchDeleteResources"
-        >
-          删除选中
-        </el-button>
+        <el-tag size="small" type="info">已选 {{ manageSelectedIds.length }} 条</el-tag>
       </div>
-      <div class="manage-hint">支持单篇移动/复制，拖动到右侧分组默认移动。</div>
       <div class="manage-body">
         <div class="manage-list">
           <el-checkbox-group v-model="manageSelectedIds" class="manage-checkbox-group">
@@ -778,19 +748,98 @@
           </el-checkbox-group>
           <el-empty v-if="!manageFilteredResources.length" description="暂无资源" :image-size="56" />
         </div>
-        <div class="manage-groups">
-          <div class="manage-group-title">拖到分组</div>
-          <div class="manage-group-list">
-            <div
-              v-for="grp in resourceGroups"
-              :key="grp.group_id"
-              class="manage-group-chip"
-              @dragover.prevent
-              @drop="handleDropToGroup(grp)"
+
+        <div class="manage-panel">
+          <div class="manage-section">
+            <div class="manage-section-title">批量操作</div>
+            <div class="manage-inline-row">
+              <el-radio-group v-model="manageMode" size="small">
+                <el-radio-button label="move">移动</el-radio-button>
+                <el-radio-button label="copy">复制</el-radio-button>
+              </el-radio-group>
+              <el-radio-group v-model="manageTargetType" size="small" class="manage-inline-radio">
+                <el-radio-button label="existing">已有分组</el-radio-button>
+                <el-radio-button label="new">新建分组</el-radio-button>
+              </el-radio-group>
+            </div>
+            <el-select
+              v-if="manageTargetType === 'existing'"
+              v-model="manageTargetGroupId"
+              size="small"
+              placeholder="选择目标分组"
             >
-              {{ grp.group_name }}
+              <el-option
+                v-for="grp in manageTransferGroupOptions"
+                :key="grp.group_id"
+                :label="`${grp.group_name} (${grp.count})`"
+                :value="grp.group_id"
+              />
+            </el-select>
+            <el-input
+              v-else
+              v-model="manageTargetGroupName"
+              size="small"
+              placeholder="输入新分组名称"
+            />
+            <div class="manage-section-actions">
+              <el-button
+                type="primary"
+                size="small"
+                :disabled="!manageSelectedIds.length"
+                @click="submitResourceTransfer"
+              >
+                应用到选中
+              </el-button>
+              <el-button size="small" :disabled="!manageSelectedIds.length" @click="manageSelectedIds = []">
+                清空选择
+              </el-button>
+            </div>
+            <el-button
+              type="danger"
+              size="small"
+              plain
+              :disabled="!manageSelectedIds.length"
+              @click="batchDeleteResources"
+            >
+              删除选中资料
+            </el-button>
+          </div>
+
+          <div class="manage-section">
+            <div class="manage-section-title">分组管理</div>
+            <div class="manage-section-subtitle">
+              当前分组：{{ manageCurrentGroup ? `${manageCurrentGroup.group_name} (${manageCurrentGroup.count})` : '未选择' }}
+            </div>
+            <div class="manage-section-actions">
+              <el-button size="small" type="primary" plain @click="createManageGroup">新建分组</el-button>
+              <el-button size="small" :disabled="!manageFilterGroupId" @click="renameManageGroup">重命名</el-button>
+              <el-button
+                type="danger"
+                size="small"
+                :disabled="!manageFilterGroupId"
+                @click="deleteManageGroup"
+              >
+                删除本分组
+              </el-button>
             </div>
           </div>
+
+          <el-collapse class="manage-advanced">
+            <el-collapse-item title="高级：拖拽快速移动" name="drag-move">
+              <div class="manage-hint">可将左侧单条资料拖拽到目标分组，默认执行移动。</div>
+              <div class="manage-group-list">
+                <div
+                  v-for="grp in resourceGroups"
+                  :key="grp.group_id"
+                  class="manage-group-chip"
+                  @dragover.prevent
+                  @drop="handleDropToGroup(grp)"
+                >
+                  {{ grp.group_name }}
+                </div>
+              </div>
+            </el-collapse-item>
+          </el-collapse>
         </div>
       </div>
       <template #footer>
@@ -1093,8 +1142,10 @@ const groupTransferVisible = ref(false)
 const resourceManageVisible = ref(false)
 const manageSelectedIds = ref([])
 const manageFilterGroupId = ref('')
+const manageKeyword = ref('')
 const manageTargetGroupId = ref('')
 const manageTargetGroupName = ref('')
+const manageTargetType = ref('existing')
 const manageMode = ref('move')
 const dragResourceId = ref('')
 const groupTransferForm = ref({
@@ -1418,8 +1469,16 @@ const filteredResources = computed(() => {
   return resources.value.filter(item => item.group_id === selectedGroupId.value)
 })
 const manageFilteredResources = computed(() => {
-  if (!manageFilterGroupId.value) return resources.value
-  return resources.value.filter(item => item.group_id === manageFilterGroupId.value)
+  const gid = String(manageFilterGroupId.value || '').trim()
+  const kw = String(manageKeyword.value || '').trim().toLowerCase()
+  return resources.value.filter(item => {
+    if (gid && item.group_id !== gid) return false
+    if (kw) {
+      const name = String(item.original_name || item.id || '').toLowerCase()
+      if (!name.includes(kw)) return false
+    }
+    return true
+  })
 })
 const memoryBindResources = computed(() => {
   const base = resources.value.filter(item => item.status === 'ok')
@@ -1454,6 +1513,15 @@ const watchBoardStyle = computed(() => {
 })
 const targetGroupOptions = computed(() => {
   const sourceId = groupTransferForm.value.source_group_id
+  return resourceGroups.value.filter(item => item.group_id !== sourceId)
+})
+const manageCurrentGroup = computed(() => {
+  const gid = String(manageFilterGroupId.value || '').trim()
+  if (!gid) return null
+  return resourceGroups.value.find(item => item.group_id === gid) || null
+})
+const manageTransferGroupOptions = computed(() => {
+  const sourceId = String(manageFilterGroupId.value || '').trim()
   return resourceGroups.value.filter(item => item.group_id !== sourceId)
 })
 const selectedPromptTemplate = computed(() => {
@@ -3543,11 +3611,30 @@ const submitGroupTransfer = async () => {
 
 const openResourceManageDialog = () => {
   manageFilterGroupId.value = selectedGroupId.value || ''
+  manageKeyword.value = ''
+  manageTargetType.value = 'existing'
   manageTargetGroupId.value = ''
   manageTargetGroupName.value = ''
   manageMode.value = 'move'
   manageSelectedIds.value = []
   resourceManageVisible.value = true
+}
+
+const resolveManageTransferTarget = () => {
+  if (manageTargetType.value === 'existing') {
+    const gid = String(manageTargetGroupId.value || '').trim()
+    if (!gid) {
+      ElMessage.warning('请选择目标分组')
+      return null
+    }
+    return { target_group_id: gid, target_group_name: '' }
+  }
+  const name = String(manageTargetGroupName.value || '').trim()
+  if (!name) {
+    ElMessage.warning('请输入新分组名称')
+    return null
+  }
+  return { target_group_id: '', target_group_name: name }
 }
 
 const transferResources = async (resourceIds, targetGroupId, targetGroupName, mode = 'move') => {
@@ -3593,10 +3680,12 @@ const renameResource = async (resource) => {
 }
 
 const submitResourceTransfer = async () => {
+  const target = resolveManageTransferTarget()
+  if (!target) return
   const ok = await transferResources(
     manageSelectedIds.value,
-    manageTargetGroupId.value,
-    manageTargetGroupName.value,
+    target.target_group_id,
+    target.target_group_name,
     manageMode.value
   )
   if (ok) {
@@ -3607,13 +3696,57 @@ const submitResourceTransfer = async () => {
 
 const quickTransferResource = async (resource) => {
   if (!resource?.id) return
+  const target = resolveManageTransferTarget()
+  if (!target) return
   const ok = await transferResources(
     [resource.id],
-    manageTargetGroupId.value,
-    manageTargetGroupName.value,
+    target.target_group_id,
+    target.target_group_name,
     manageMode.value
   )
   if (ok) ElMessage.success('资料已更新')
+}
+
+const deleteManageGroup = async () => {
+  const gid = String(manageFilterGroupId.value || '').trim()
+  if (!gid) {
+    ElMessage.warning('请先选择分组')
+    return
+  }
+
+  const current = manageCurrentGroup.value
+  const groupName = current?.group_name || gid
+  let impactText = ''
+  try {
+    const impactRes = await ApiService.getStrategyResourceGroupImpact(gid)
+    const impact = impactRes.data || {}
+    impactText = `资料 ${Number(impact.resource_count || 0)} 条，关联策略 ${Number(impact.strategy_count || 0)} 个，长期记忆订阅 ${Number(impact.memory_subscription_profile_count || 0)} 个。`
+  } catch (error) {
+    console.error(error)
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      `确定删除分组“${groupName}”？\n处理方式：资料转入“未分组”后删除该分组。\n${impactText}`.trim(),
+      '删除分组',
+      {
+        type: 'warning',
+        confirmButtonText: '确认删除',
+        cancelButtonText: '取消'
+      }
+    )
+    await ApiService.deleteStrategyResourceGroup(gid, {
+      action: 'move_to_default',
+      remove_subscriptions: false
+    })
+    if (selectedGroupId.value === gid) selectedGroupId.value = ''
+    manageFilterGroupId.value = ''
+    manageSelectedIds.value = []
+    await loadResources()
+    ElMessage.success('分组删除完成')
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
 }
 
 const batchDeleteResources = async () => {
@@ -4133,6 +4266,8 @@ const sendMessage = async () => {
     if (isStrategyEditMode) {
       stopStrategyEditRun()
     }
+    const message = error?.message || error?.error || '发送失败，请检查网络与后端服务'
+    ElMessage.error(message)
   } finally {
     sending.value = false
   }
@@ -4220,6 +4355,14 @@ watch(selectedAgentName, (nextVal) => {
   const mode = activeMode.value
   if (!mode || !nextVal) return
   modeAgentSelection.value[mode] = nextVal
+})
+
+watch(manageTargetType, (next) => {
+  if (next === 'existing') {
+    manageTargetGroupName.value = ''
+  } else {
+    manageTargetGroupId.value = ''
+  }
 })
 
 watch(activeMemoryProfileId, async (nextId, prevId) => {
@@ -5411,8 +5554,9 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 .manage-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 10px;
   align-items: center;
+  margin-bottom: 10px;
 }
 
 .manage-hint {
@@ -5423,7 +5567,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
 .manage-body {
   display: grid;
-  grid-template-columns: 1fr 180px;
+  grid-template-columns: 1fr 320px;
   gap: 12px;
   min-height: 320px;
 }
@@ -5435,6 +5579,55 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   max-height: 420px;
   overflow: auto;
   background: #fff;
+}
+
+.manage-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.manage-section {
+  border: 1px solid #e7eaf0;
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.manage-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2a3f55;
+}
+
+.manage-section-subtitle {
+  font-size: 12px;
+  color: #667789;
+}
+
+.manage-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manage-inline-radio {
+  flex-wrap: wrap;
+}
+
+.manage-section-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.manage-advanced :deep(.el-collapse-item__header) {
+  font-size: 12px;
+  color: #5d6b7a;
 }
 
 .manage-checkbox-group {
@@ -5483,17 +5676,6 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.manage-groups {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.manage-group-title {
-  font-size: 12px;
-  color: #5d6b7a;
 }
 
 .manage-group-list {
