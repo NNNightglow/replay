@@ -1106,18 +1106,17 @@
                 v-model="watchlistConfigStockQuery"
                 size="small"
                 clearable
-                placeholder="输入股票代码或名称"
+                placeholder="输入名称或部分代码（自动搜索股票/指数/板块）"
                 @keydown.enter.prevent="searchWatchlistConfigStocks"
               />
-              <el-button size="small" :loading="watchlistConfigStockSearching" @click="searchWatchlistConfigStocks">查询</el-button>
             </div>
             <div class="watchlist-config-stock-list">
               <div
                 v-for="row in watchlistConfigStockCandidates"
-                :key="`watchlist-config-stock-${row.code}`"
+                :key="`watchlist-config-stock-${row.key}`"
                 class="watchlist-config-stock-item"
               >
-                <span class="stock-code">{{ row.code }}</span>
+                <span class="stock-code">{{ row.display_code || '--' }}</span>
                 <span class="stock-name">{{ row.name }}</span>
                 <button
                   v-if="!row.in_group"
@@ -1708,6 +1707,11 @@ const watchlistConfigActiveMenu = ref('add_stock')
 const watchlistConfigStockQuery = ref('')
 const watchlistConfigStockCandidates = ref([])
 const watchlistConfigStockSearching = ref(false)
+const watchlistConfigStockSearchTimer = ref(null)
+const watchlistConfigStockSearchReqId = ref(0)
+const watchlistConfigIndexCandidates = ref([])
+const watchlistConfigSectorCandidates = ref([])
+const watchlistConfigLookupLoaded = ref(false)
 const watchlistHeaderSearch = ref('')
 const watchlistColumnSchemeId = ref('classic')
 const watchlistColumnSchemes = [
@@ -2574,6 +2578,7 @@ const openWatchlistPanelConfig = (widget) => {
   watchlistHeaderSearch.value = ''
   watchlistColumnSchemeId.value = 'classic'
   watchlistPanelConfigVisible.value = true
+  loadWatchlistConfigLookups()
 }
 
 const patchWatchlistWidgetParamsById = async (widgetId, patch = {}) => {
@@ -2611,47 +2616,150 @@ const saveWatchlistPanelConfig = async () => {
   })
 }
 
+const loadWatchlistConfigLookups = async () => {
+  if (watchlistConfigLookupLoaded.value) return
+  try {
+    const [indexRes, sectorRes] = await Promise.all([
+      ApiService.getIndicesAvailable().catch(() => null),
+      ApiService.getSectorNames('both').catch(() => null)
+    ])
+    const rawIndexRows = Array.isArray(indexRes?.data?.available_indices)
+      ? indexRes.data.available_indices
+      : (Array.isArray(indexRes?.data) ? indexRes.data : [])
+    const indexRows = rawIndexRows.map(item => ({
+      code: String(item?.code || item?.index_code || '').trim(),
+      name: String(item?.name || item?.index_name || '').trim()
+    })).filter(item => !!item.name)
+    const mergedIndexMap = new Map()
+    indexRows.forEach(item => {
+      const key = `${item.code}|${item.name}`
+      if (!mergedIndexMap.has(key)) mergedIndexMap.set(key, item)
+    })
+    watchlistIndexOptions.value.forEach(name => {
+      const n = String(name || '').trim()
+      if (!n) return
+      const key = `|${n}`
+      if (!mergedIndexMap.has(key)) mergedIndexMap.set(key, { code: '', name: n })
+    })
+    watchlistConfigIndexCandidates.value = Array.from(mergedIndexMap.values())
+
+    const sectorData = sectorRes?.data || {}
+    const sectorNames = [
+      ...(Array.isArray(sectorData?.sector_names) ? sectorData.sector_names : []),
+      ...(Array.isArray(sectorData?.concept_names) ? sectorData.concept_names : []),
+      ...(Array.isArray(sectorData?.names) ? sectorData.names : [])
+    ]
+    const sectorSet = new Set(sectorNames.map(name => String(name || '').trim()).filter(Boolean))
+    watchlistConfigSectorCandidates.value = Array.from(sectorSet)
+    watchlistConfigLookupLoaded.value = true
+  } catch (error) {
+    watchlistConfigLookupLoaded.value = false
+    console.error(error)
+  }
+}
+
 const searchWatchlistConfigStocks = async () => {
   const keyword = String(watchlistConfigStockQuery.value || '').trim()
   if (!keyword) {
     watchlistConfigStockCandidates.value = []
     return
   }
+  const reqId = watchlistConfigStockSearchReqId.value + 1
+  watchlistConfigStockSearchReqId.value = reqId
   watchlistConfigStockSearching.value = true
   try {
-    const res = await ApiService.searchStocks(keyword)
-    const rows = Array.isArray(res?.data) ? res.data : []
+    await loadWatchlistConfigLookups()
+    const stockRes = await ApiService.searchStocks(keyword).catch(() => ({ data: [] }))
+    if (reqId !== watchlistConfigStockSearchReqId.value) return
+    const rows = Array.isArray(stockRes?.data) ? stockRes.data : []
     const gid = String(watchlistPanelConfigForm.value.group_id || '').trim()
     const group = watchlistGroups.value.find(one => one.id === gid) || null
-    const existsSet = new Set(
-      (Array.isArray(group?.items) ? group.items : [])
+    const items = Array.isArray(group?.items) ? group.items : []
+    const existsStockSet = new Set(
+      items
         .filter(one => one?.type === 'stock')
         .map(one => normalizeStockCode(one?.code || ''))
     )
-    watchlistConfigStockCandidates.value = rows.slice(0, 50).map(item => {
+    const existsIndexSet = new Set(
+      items
+        .filter(one => one?.type === 'index')
+        .map(one => String(one?.name || '').trim())
+        .filter(Boolean)
+    )
+    const existsSectorSet = new Set(
+      items
+        .filter(one => one?.type === 'sector')
+        .map(one => String(one?.name || '').trim())
+        .filter(Boolean)
+    )
+    const keywordLower = keyword.toLowerCase()
+    const stockCandidates = rows.slice(0, 40).map(item => {
       const code = normalizeStockCode(item?.代码 || item?.code || '')
+      const name = String(item?.名称 || item?.name || '').trim() || code
       return {
+        key: `stock:${code}`,
+        type: 'stock',
         code,
-        name: String(item?.名称 || item?.name || '').trim() || code,
-        in_group: existsSet.has(code)
+        display_code: code,
+        name,
+        in_group: existsStockSet.has(code)
       }
     }).filter(one => !!one.code)
+    const indexCandidates = watchlistConfigIndexCandidates.value
+      .filter(item => {
+        const name = String(item?.name || '').trim()
+        const code = String(item?.code || '').trim().toLowerCase()
+        return name.toLowerCase().includes(keywordLower) || code.includes(keywordLower)
+      })
+      .slice(0, 15)
+      .map(item => ({
+        key: `index:${item.code || item.name}`,
+        type: 'index',
+        code: String(item?.code || '').trim(),
+        display_code: String(item?.code || '').trim(),
+        name: String(item?.name || '').trim(),
+        in_group: existsIndexSet.has(String(item?.name || '').trim())
+      }))
+    const sectorCandidates = watchlistConfigSectorCandidates.value
+      .filter(name => String(name || '').toLowerCase().includes(keywordLower))
+      .slice(0, 15)
+      .map(name => ({
+        key: `sector:${name}`,
+        type: 'sector',
+        code: '',
+        display_code: '--',
+        name: String(name || '').trim(),
+        in_group: existsSectorSet.has(String(name || '').trim())
+      }))
+    watchlistConfigStockCandidates.value = [...stockCandidates, ...indexCandidates, ...sectorCandidates].slice(0, 50)
   } catch (error) {
     console.error(error)
     watchlistConfigStockCandidates.value = []
   } finally {
-    watchlistConfigStockSearching.value = false
+    if (reqId === watchlistConfigStockSearchReqId.value) {
+      watchlistConfigStockSearching.value = false
+    }
   }
 }
 
 const addStockFromWatchlistConfigRow = async (row) => {
+  const type = String(row?.type || 'stock').trim()
   const code = normalizeStockCode(row?.code || '')
   const name = String(row?.name || '').trim() || code
   const gid = String(watchlistPanelConfigForm.value.group_id || '').trim()
-  if (!gid || !code) return
-  await addWatchlistItemToGroup(gid, { type: 'stock', code, name })
+  if (!gid) return
+  if (type === 'stock' && !code) return
+  if (type === 'stock') {
+    await addWatchlistItemToGroup(gid, { type: 'stock', code, name })
+  } else if (type === 'index') {
+    await addWatchlistItemToGroup(gid, { type: 'index', name })
+  } else if (type === 'sector') {
+    await addWatchlistItemToGroup(gid, { type: 'sector', name })
+  } else {
+    return
+  }
   watchlistConfigStockCandidates.value = watchlistConfigStockCandidates.value.map(item => (
-    item.code === code ? { ...item, in_group: true } : item
+    item.key === row.key ? { ...item, in_group: true } : item
   ))
   const widget = watchlistPanelConfigWidget.value
   if (widget?.id) {
@@ -5987,6 +6095,10 @@ onBeforeUnmount(() => {
     clearTimeout(watchPersistTimer.value)
     watchPersistTimer.value = null
   }
+  if (watchlistConfigStockSearchTimer.value) {
+    clearTimeout(watchlistConfigStockSearchTimer.value)
+    watchlistConfigStockSearchTimer.value = null
+  }
 })
 
 watch(promptTemplates, () => {
@@ -6019,6 +6131,23 @@ watch(watchLayoutEditMode, (nextVal) => {
 watch(watchlistGroups, () => {
   ensureActiveWatchlistGroup()
 }, { deep: true })
+
+watch(watchlistConfigStockQuery, (nextVal) => {
+  if (!watchlistPanelConfigVisible.value || watchlistConfigActiveMenu.value !== 'add_stock') return
+  if (watchlistConfigStockSearchTimer.value) {
+    clearTimeout(watchlistConfigStockSearchTimer.value)
+    watchlistConfigStockSearchTimer.value = null
+  }
+  const keyword = String(nextVal || '').trim()
+  if (!keyword) {
+    watchlistConfigStockCandidates.value = []
+    watchlistConfigStockSearching.value = false
+    return
+  }
+  watchlistConfigStockSearchTimer.value = setTimeout(() => {
+    searchWatchlistConfigStocks()
+  }, 180)
+})
 
 watch(keyWatchGroupFilterOptions, (options) => {
   if (Array.isArray(options) && options.some(item => item.value === keyWatchFilterGroup.value)) return
