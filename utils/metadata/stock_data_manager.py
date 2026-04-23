@@ -21,6 +21,7 @@ import threading
 import tempfile
 import shutil
 import json
+from importlib.metadata import PackageNotFoundError, version
 # from akshare.utils.requests_fun import requests_obj
 
 # requests_obj.headers.update({
@@ -72,6 +73,42 @@ def safe_network_request(func, *args, max_retries=3, timeout_seconds=30, disable
                 print(f"❌ 网络请求最终失败，已重试 {max_retries} 次")
 
     return None
+
+
+BAOSTOCK_RECOMMENDED_VERSION = "0.9.1"
+
+
+def _get_baostock_version() -> str:
+    """返回当前环境安装的 baostock 版本，获取失败返回 unknown。"""
+    try:
+        return str(version("baostock"))
+    except PackageNotFoundError:
+        return "not-installed"
+    except Exception:
+        return "unknown"
+
+
+def _is_baostock_network_error(error_code: Any = "", error_msg: Any = "", exc: Any = None) -> bool:
+    """识别 baostock 常见网络接收类错误（如 10002007 / WinError 10057）。"""
+    text = " ".join(
+        str(part or "")
+        for part in (error_code, error_msg, exc)
+    ).lower()
+    keywords = (
+        "10002007",
+        "winerror 10057",
+        "网络接收错误",
+        "服务器连接失败",
+        "接收数据异常",
+        "socket",
+        "sendto",
+    )
+    return any(key.lower() in text for key in keywords)
+
+
+def _baostock_version_hint() -> str:
+    current = _get_baostock_version()
+    return f"请检查 baostock 版本，建议 baostock=={BAOSTOCK_RECOMMENDED_VERSION}（当前: {current}）"
 
 
 try:
@@ -527,7 +564,10 @@ class StockMetadataManager:
                     if not use_existing_bs_session:
                         lg = bs.login()
                         if lg.error_code != '0':
-                            print(f"[fill-gap] baostock login failed: {lg.error_msg}")
+                            msg = f"[fill-gap] baostock login failed: {lg.error_msg}"
+                            if _is_baostock_network_error(lg.error_code, lg.error_msg):
+                                msg = f"{msg}。{_baostock_version_hint()}"
+                            print(msg)
                         else:
                             bs_session_ready = True
                             logged_in_here = True
@@ -799,7 +839,10 @@ class StockMetadataManager:
                         if total_ranges > 0:
                             lg = bs.login()
                             if lg.error_code != '0':
-                                print(f"⚠️ 缺口批量填补前 baostock 登录失败，将回退为区间内独立登录: {lg.error_msg}")
+                                msg = f"⚠️ 缺口批量填补前 baostock 登录失败，将回退为区间内独立登录: {lg.error_msg}"
+                                if _is_baostock_network_error(lg.error_code, lg.error_msg):
+                                    msg = f"{msg}。{_baostock_version_hint()}"
+                                print(msg)
                             else:
                                 bs_session_ready = True
 
@@ -922,6 +965,8 @@ class StockMetadataManager:
         lg = bs.login()
         print('login respond error_code:'+lg.error_code)
         print('login respond error_msg:'+lg.error_msg)
+        if lg.error_code != '0' and _is_baostock_network_error(lg.error_code, lg.error_msg):
+            print(f"⚠️ baostock 登录异常。{_baostock_version_hint()}")
 
         #### 获取所有A股股票代码和名称（在非交易日自动回退） ####
         max_back_steps = 5
@@ -931,7 +976,11 @@ class StockMetadataManager:
             rs = bs.query_all_stock(day=attempt_end_date)
             # baostock若返回错误，直接回退到上一个交易日
             if hasattr(rs, 'error_code') and rs.error_code != '0':
-                print(f"获取股票列表失败: {getattr(rs, 'error_msg', '')}，回退重试: {attempt_end_date}")
+                err_msg = getattr(rs, 'error_msg', '')
+                msg = f"获取股票列表失败: {err_msg}，回退重试: {attempt_end_date}"
+                if _is_baostock_network_error(getattr(rs, 'error_code', ''), err_msg):
+                    msg = f"{msg}。{_baostock_version_hint()}"
+                print(msg)
                 try:
                     from utils.trading_calendar import trading_calendar
                     d = datetime.strptime(attempt_end_date, '%Y-%m-%d').date()
@@ -1016,7 +1065,10 @@ class StockMetadataManager:
                     error_reason_counter[reason] = error_reason_counter.get(reason, 0) + 1
                     failed_stocks.append((stock_code, stock_name))
                     if failed_count <= 5 or failed_count % 50 == 0:
-                        print(f"⚠️ 获取 {stock_code} {stock_name} 数据失败: {reason} (累计失败 {failed_count})")
+                        msg = f"⚠️ 获取 {stock_code} {stock_name} 数据失败: {reason} (累计失败 {failed_count})"
+                        if _is_baostock_network_error(rs.error_code, rs.error_msg):
+                            msg = f"{msg}。{_baostock_version_hint()}"
+                        print(msg)
                     continue
                     
                 # 获取数据
