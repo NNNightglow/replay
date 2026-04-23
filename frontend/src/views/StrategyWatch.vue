@@ -719,7 +719,7 @@
                       <span>{{ widget.title }}</span>
                       <div class="widget-header-actions">
                         <el-dropdown
-                          v-if="widget.type === 'watchlist_panel' || isAnalysisWidgetType(widget.type)"
+                          v-if="isAnalysisWidgetType(widget.type)"
                           trigger="click"
                           @command="(cmd) => setWidgetLinkGroup(widget, cmd)"
                         >
@@ -738,12 +738,21 @@
                           </template>
                         </el-dropdown>
                         <el-button
-                          v-if="widget.type === 'watchlist_panel'"
+                          v-if="widget.type === 'daily_replay'"
                           size="small"
                           link
-                          @click.stop="openWatchlistPanelConfig(widget)"
+                          @click.stop="openDailyReplayRequirementDialog(widget)"
                         >
-                          设置
+                          复盘要求
+                        </el-button>
+                        <el-button
+                          v-if="widget.type === 'daily_replay'"
+                          size="small"
+                          link
+                          :loading="dailyReplayRunningWidgetId === widget.id"
+                          @click.stop="runDailyReplayWidget(widget)"
+                        >
+                          开始复盘
                         </el-button>
                         <el-button
                           v-if="watchLayoutEditMode"
@@ -832,6 +841,27 @@
                             </span>
                           </div>
                           <el-empty v-if="!(widget.watchlistRows || []).length" description="自选股为空" :image-size="58" />
+                        </div>
+                      </div>
+                      <div v-else-if="widget.type === 'daily_replay'" class="daily-replay-widget">
+                        <div class="daily-replay-head">
+                          <div class="daily-replay-title">今日复盘</div>
+                          <div class="daily-replay-sub">调用策略编辑多 Agent 执行复盘</div>
+                        </div>
+                        <div class="daily-replay-content">
+                          <div class="daily-replay-label">复盘要求</div>
+                          <div class="daily-replay-requirement">{{ widget.replayRequirement || '未设置复盘要求，点击右上角“复盘要求”' }}</div>
+                        </div>
+                        <div class="daily-replay-actions">
+                          <el-button size="small" @click="openDailyReplayRequirementDialog(widget)">编辑要求</el-button>
+                          <el-button
+                            size="small"
+                            type="primary"
+                            :loading="dailyReplayRunningWidgetId === widget.id"
+                            @click="runDailyReplayWidget(widget)"
+                          >
+                            开始复盘
+                          </el-button>
                         </div>
                       </div>
                       <EChartsRenderer
@@ -1185,6 +1215,21 @@
       <template #footer>
         <el-button @click="watchlistPanelConfigVisible = false">关闭</el-button>
         <el-button type="primary" @click="saveWatchlistPanelConfig">保存表头设置</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="dailyReplayConfigVisible" title="每日复盘要求" width="680px">
+      <div class="daily-replay-config">
+        <el-input
+          v-model="dailyReplayRequirementDraft"
+          type="textarea"
+          :rows="12"
+          placeholder="输入复盘要求，如：先总结市场主线，再复盘自选组中的强弱分化与明日观察点"
+        />
+      </div>
+      <template #footer>
+        <el-button @click="dailyReplayConfigVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveDailyReplayRequirement">保存</el-button>
       </template>
     </el-dialog>
 
@@ -1640,6 +1685,22 @@ const widgetToolCategories = [
     ]
   },
   {
+    id: 'review',
+    label: '复盘',
+    templates: [
+      {
+        id: 'daily_replay',
+        type: 'daily_replay',
+        title: '每日复盘',
+        desc: '保存复盘要求并调用策略编辑多 Agent 执行复盘。',
+        defaults: {
+          requirement: '请按市场主线、强弱切换、风险点、明日计划四部分完成今日复盘。'
+        },
+        fields: []
+      }
+    ]
+  },
+  {
     id: 'market',
     label: '市场',
     templates: [
@@ -1690,6 +1751,10 @@ const watchlistSelectedIndexName = ref('')
 const watchlistIndexOptions = ref(['上证指数', '深证成指', '创业板指', '科创50', '沪深300'])
 const watchlistPanelConfigVisible = ref(false)
 const watchlistPanelConfigWidgetId = ref('')
+const dailyReplayConfigVisible = ref(false)
+const dailyReplayConfigWidgetId = ref('')
+const dailyReplayRequirementDraft = ref('')
+const dailyReplayRunningWidgetId = ref('')
 const watchlistPanelConfigForm = ref({
   group_id: '',
   max_count: 50,
@@ -1901,7 +1966,7 @@ const watchBoardHeight = computed(() => {
     const h = Number(layout.h || 360)
     return Math.max(max, y + h)
   }, 0)
-  return Math.max(360, Math.ceil(bottom + 24))
+  return Math.max(360, Math.ceil(bottom))
 })
 const watchBoardStyle = computed(() => {
   return { height: `${watchBoardHeight.value}px` }
@@ -2009,6 +2074,7 @@ const detectAnalysisTargetType = (value, preferred = 'auto') => {
 const normalizeAnalysisKlineParams = (source = {}) => {
   const days = clampNumber(Number(source.days || source.days_range || 120) || 120, 20, 500)
   const targetType = normalizeAnalysisTargetType(source.target_type || source.type_hint || 'auto')
+  let targetName = String(source.target_name || source.name || '').trim()
   let targetValue = String(
     source.target_value
       || source.stock_code
@@ -2024,17 +2090,26 @@ const normalizeAnalysisKlineParams = (source = {}) => {
   } else if (resolvedType === 'index') {
     const byName = INDEX_NAME_CODE_MAP[targetValue]
     if (byName) {
+      if (!targetName) targetName = targetValue
       targetValue = byName
     } else {
       const byCodeLike = normalizeIndexCodeLike(targetValue)
-      if (byCodeLike) targetValue = byCodeLike
+      if (byCodeLike) {
+        targetValue = byCodeLike
+        if (!targetName) targetName = INDEX_CODE_NAME_MAP[byCodeLike] || ''
+      }
     }
   } else if (!targetValue) {
     targetValue = resolvedType === 'index' ? '上证指数' : '半导体'
   }
+  if (!targetName && resolvedType === 'index') {
+    const codeLike = normalizeIndexCodeLike(targetValue)
+    targetName = codeLike ? (INDEX_CODE_NAME_MAP[codeLike] || '') : ''
+  }
   return {
     target_type: targetType,
     target_value: targetValue,
+    target_name: targetName,
     days,
     link_group: watchLinkGroupOptions.includes(String(source.link_group || '').trim())
       ? String(source.link_group || '').trim()
@@ -2150,6 +2225,38 @@ const WATCH_WIDGET_MIN_WIDTH = 300
 const WATCH_WIDGET_MIN_HEIGHT = 240
 const WATCH_WIDGET_MAX_WIDTH = 1500
 const WATCH_LAYOUT_SAVE_DEBOUNCE_MS = 700
+const WATCH_WIDGET_SNAP_THRESHOLD = 8
+const alignLayoutPixel = (value) => {
+  const raw = Number(value || 0)
+  if (!Number.isFinite(raw)) return 0
+  if (typeof window === 'undefined') return Math.round(raw)
+  const dpr = Number(window.devicePixelRatio || 1)
+  if (!Number.isFinite(dpr) || dpr <= 0) return Math.round(raw)
+  return Math.round(raw * dpr) / dpr
+}
+const snapCoordinate = (value, targets, threshold = WATCH_WIDGET_SNAP_THRESHOLD) => {
+  const current = Number(value || 0)
+  if (!Number.isFinite(current)) return 0
+  const source = Array.isArray(targets) ? targets : []
+  let best = current
+  let bestDelta = Number.POSITIVE_INFINITY
+  source.forEach((one) => {
+    const candidate = Number(one)
+    if (!Number.isFinite(candidate)) return
+    const delta = Math.abs(candidate - current)
+    if (delta <= threshold && delta < bestDelta) {
+      bestDelta = delta
+      best = candidate
+    }
+  })
+  return best
+}
+const getSnapLayouts = (excludeWidgetId) => {
+  const wid = String(excludeWidgetId || '').trim()
+  return watchWidgetDefs.value
+    .filter(item => String(item?.id || '').trim() && String(item?.id || '').trim() !== wid)
+    .map(item => normalizeWidgetLayout(item?.layout || {}, 0, item?.type || 'market_sentiment_chart'))
+}
 const watchPointerState = {
   mode: '',
   widgetId: '',
@@ -2163,15 +2270,35 @@ const getSentimentChartTitle = (chartKey) => {
   return found?.title || '市场情绪图'
 }
 
+const getAnalysisWidgetDisplayLabel = (params = {}) => {
+  const target = getAnalysisTarget(params)
+  const normalized = normalizeAnalysisKlineParams(params)
+  const targetName = String(normalized.target_name || '').trim()
+  if (target.type === 'stock') {
+    const code = normalizeStockWidgetCode(target.value)
+    if (targetName && targetName !== code) return `${code} ${targetName}`
+    return code || '分析标的'
+  }
+  if (target.type === 'index') {
+    const codeLike = normalizeIndexCodeLike(target.value)
+    const inferredName = targetName || (codeLike ? (INDEX_CODE_NAME_MAP[codeLike] || '') : '')
+    if (codeLike && inferredName && inferredName !== codeLike) return `${codeLike} ${inferredName}`
+    return inferredName || target.value || '指数'
+  }
+  return targetName || target.value || '板块'
+}
+
+const getAnalysisWidgetTitle = (params = {}) => `${getAnalysisWidgetDisplayLabel(params)} K线`
+
 const buildWidgetTitle = (type, params = {}) => {
   if (type === 'analysis_kline') {
-    const target = getAnalysisTarget(params)
-    return `${target.value || '分析标的'} K线`
+    return getAnalysisWidgetTitle(params)
   }
   if (type === 'index_kline') return `${params.index_name || '上证指数'} K线`
   if (type === 'sector_kline') return `${params.sector_name || '板块'} K线`
   if (type === 'stock_kline') return `${params.stock_code || '000001'} K线`
   if (type === 'watchlist_panel') return '自选股列表'
+  if (type === 'daily_replay') return '每日复盘'
   if (type === 'market_volume') return '市场量能对比'
   if (type === 'market_sentiment_chart') return getSentimentChartTitle(params.chart_key)
   return '自定义图表'
@@ -2183,6 +2310,7 @@ const getDefaultWidgetSize = (type) => {
   if (type === 'analysis_kline') return { w: 620, h: 520 }
   if (type === 'index_kline' || type === 'sector_kline' || type === 'stock_kline') return { w: 620, h: 520 }
   if (type === 'watchlist_panel') return { w: 460, h: 520 }
+  if (type === 'daily_replay') return { w: 520, h: 320 }
   if (type === 'market_volume') return { w: 620, h: 420 }
   return { w: 500, h: 420 }
 }
@@ -2243,6 +2371,12 @@ const normalizeWidgetParams = (type, rawParams = {}) => {
         : ''
     }
   }
+  if (type === 'daily_replay') {
+    return {
+      requirement: String(source.requirement || source.replay_requirement || '').trim()
+        || '请按市场主线、强弱切换、风险点、明日计划四部分完成今日复盘。'
+    }
+  }
   if (type === 'market_sentiment_chart') {
     const chartKey = String(source.chart_key || source.key || 'red_ratio_and_amount').trim() || 'red_ratio_and_amount'
     const validChartKey = marketSentimentChartOptions.some(item => item.key === chartKey)
@@ -2262,11 +2396,11 @@ const normalizeWidgetParams = (type, rawParams = {}) => {
 const normalizeWidgetLayout = (rawLayout, index, type) => {
   const defaults = getDefaultWidgetLayout(index, type)
   const source = rawLayout && typeof rawLayout === 'object' ? rawLayout : {}
-  const width = clampNumber(Number(source.w || defaults.w) || defaults.w, WATCH_WIDGET_MIN_WIDTH, WATCH_WIDGET_MAX_WIDTH)
-  const height = clampNumber(Number(source.h || defaults.h) || defaults.h, WATCH_WIDGET_MIN_HEIGHT, 1800)
+  const width = alignLayoutPixel(clampNumber(Number(source.w || defaults.w) || defaults.w, WATCH_WIDGET_MIN_WIDTH, WATCH_WIDGET_MAX_WIDTH))
+  const height = alignLayoutPixel(clampNumber(Number(source.h || defaults.h) || defaults.h, WATCH_WIDGET_MIN_HEIGHT, 1800))
   return {
-    x: Math.max(0, Number(source.x || defaults.x) || defaults.x),
-    y: Math.max(0, Number(source.y || defaults.y) || defaults.y),
+    x: alignLayoutPixel(Math.max(0, Number(source.x || defaults.x) || defaults.x)),
+    y: alignLayoutPixel(Math.max(0, Number(source.y || defaults.y) || defaults.y)),
     w: width,
     h: height
   }
@@ -2581,16 +2715,18 @@ const openWatchlistPanelConfig = (widget) => {
   loadWatchlistConfigLookups()
 }
 
-const patchWatchlistWidgetParamsById = async (widgetId, patch = {}) => {
+const patchWidgetParamsById = async (widgetId, patch = {}) => {
   const target = String(widgetId || '').trim()
   if (!target) return false
   const idx = watchWidgetDefs.value.findIndex(item => item.id === target)
   if (idx < 0) return false
   const next = [...watchWidgetDefs.value]
   const current = next[idx]
+  const type = String(current?.type || '').trim()
+  if (!type) return false
   next[idx] = {
     ...current,
-    params: normalizeWidgetParams('watchlist_panel', {
+    params: normalizeWidgetParams(type, {
       ...(current.params || {}),
       ...(patch || {})
     })
@@ -2601,6 +2737,80 @@ const patchWatchlistWidgetParamsById = async (widgetId, patch = {}) => {
   const rendered = await renderWatchWidget(next[idx])
   watchWidgets.value = patchWidgetById(watchWidgets.value, target, () => rendered)
   return true
+}
+
+const patchWatchlistWidgetParamsById = async (widgetId, patch = {}) => {
+  return patchWidgetParamsById(widgetId, patch)
+}
+
+const openDailyReplayRequirementDialog = (widget) => {
+  const wid = String(widget?.id || '').trim()
+  if (!wid) return
+  const def = watchWidgetDefs.value.find(item => item.id === wid)
+  const params = normalizeWidgetParams('daily_replay', def?.params || widget?.params || {})
+  dailyReplayConfigWidgetId.value = wid
+  dailyReplayRequirementDraft.value = String(params.requirement || '').trim()
+  dailyReplayConfigVisible.value = true
+}
+
+const saveDailyReplayRequirement = async () => {
+  const wid = String(dailyReplayConfigWidgetId.value || '').trim()
+  if (!wid) {
+    dailyReplayConfigVisible.value = false
+    return
+  }
+  const requirement = String(dailyReplayRequirementDraft.value || '').trim()
+  if (!requirement) {
+    ElMessage.warning('请先输入复盘要求')
+    return
+  }
+  const saved = await patchWidgetParamsById(wid, { requirement })
+  if (saved) {
+    dailyReplayConfigVisible.value = false
+    ElMessage.success('复盘要求已保存')
+  }
+}
+
+const buildDailyReplayPrompt = (widget) => {
+  const params = normalizeWidgetParams('daily_replay', widget?.params || {})
+  const requirement = String(params.requirement || '').trim()
+  const strategyName = String(activeStrategy.value?.name || activeStrategy.value?.strategy_name || '').trim() || '当前策略'
+  const dateStr = dayjs().format('YYYY-MM-DD')
+  return [
+    `请按以下要求完成 ${dateStr} 的策略复盘。`,
+    `策略：${strategyName}`,
+    '',
+    '【复盘要求】',
+    requirement,
+    '',
+    '请输出结构化结论：',
+    '1. 市场环境与主线',
+    '2. 自选/关注标的强弱与分化',
+    '3. 主要风险点与触发条件',
+    '4. 明日计划（观察、应对、执行）'
+  ].join('\n')
+}
+
+const runDailyReplayWidget = async (widget) => {
+  const wid = String(widget?.id || '').trim()
+  if (!wid) return
+  const params = normalizeWidgetParams('daily_replay', widget?.params || {})
+  if (!String(params.requirement || '').trim()) {
+    openDailyReplayRequirementDialog(widget)
+    return
+  }
+  if (sending.value || dailyReplayRunningWidgetId.value) {
+    ElMessage.warning('当前有任务正在执行，请稍后再试')
+    return
+  }
+  dailyReplayRunningWidgetId.value = wid
+  try {
+    await runStrategyEditPrompt(buildDailyReplayPrompt(widget))
+  } finally {
+    if (dailyReplayRunningWidgetId.value === wid) {
+      dailyReplayRunningWidgetId.value = ''
+    }
+  }
 }
 
 const saveWatchlistPanelConfig = async () => {
@@ -2921,12 +3131,15 @@ const onWatchlistPanelRowClick = async (widget, item) => {
       if (source.type === 'stock' && source.code) {
         patch.target_type = 'stock'
         patch.target_value = normalizeStockWidgetCode(source.code)
+        patch.target_name = String(source.name || '').trim()
       } else if (source.type === 'sector' && source.name) {
         patch.target_type = 'sector'
         patch.target_value = String(source.name || '').trim()
+        patch.target_name = String(source.name || '').trim()
       } else if (source.type === 'index' && source.name) {
         patch.target_type = 'index'
         patch.target_value = String(source.name || '').trim()
+        patch.target_name = String(source.name || '').trim()
       } else {
         return one
       }
@@ -3039,8 +3252,8 @@ const getDroppedWidgetLayout = (type, event) => {
   const maxX = Math.max(0, Math.max(Number(boardEl.scrollWidth || 0), Number(boardEl.clientWidth || 0)) - size.w)
   return normalizeWidgetLayout(
     {
-      x: clampNumber(rawX, 0, maxX),
-      y: Math.max(0, rawY),
+      x: alignLayoutPixel(clampNumber(rawX, 0, maxX)),
+      y: alignLayoutPixel(Math.max(0, rawY)),
       w: size.w,
       h: size.h
     },
@@ -3107,8 +3320,7 @@ const onWatchBoardDrop = async (event) => {
 }
 
 const getWidgetChartHeight = (widget) => {
-  const raw = Number(widget?.layout?.h || 360) - 58
-  return `${Math.max(180, Math.floor(raw))}px`
+  return '100%'
 }
 
 const getWidgetRenderKey = (widget) => {
@@ -3125,10 +3337,10 @@ const getWidgetRenderKey = (widget) => {
 const watchWidgetStyle = (widget) => {
   const layout = widget?.layout || {}
   return {
-    left: `${Math.max(0, Number(layout.x || 0))}px`,
-    top: `${Math.max(0, Number(layout.y || 0))}px`,
-    width: `${clampNumber(Number(layout.w || 500), WATCH_WIDGET_MIN_WIDTH, WATCH_WIDGET_MAX_WIDTH)}px`,
-    height: `${clampNumber(Number(layout.h || 420), WATCH_WIDGET_MIN_HEIGHT, 1800)}px`
+    left: `${alignLayoutPixel(Math.max(0, Number(layout.x || 0)))}px`,
+    top: `${alignLayoutPixel(Math.max(0, Number(layout.y || 0)))}px`,
+    width: `${alignLayoutPixel(clampNumber(Number(layout.w || 500), WATCH_WIDGET_MIN_WIDTH, WATCH_WIDGET_MAX_WIDTH))}px`,
+    height: `${alignLayoutPixel(clampNumber(Number(layout.h || 420), WATCH_WIDGET_MIN_HEIGHT, 1800))}px`
   }
 }
 
@@ -4842,21 +5054,50 @@ const onWatchWidgetInteractMove = (event) => {
   const start = watchPointerState.startLayout || { x: 0, y: 0, w: 0, h: 0 }
   const boardRect = watchBoardRef.value?.getBoundingClientRect()
   const boardWidth = Math.max(0, Number(boardRect?.width || 0))
+  const snapLayouts = getSnapLayouts(widgetId)
 
   if (watchPointerState.mode === 'drag') {
     const maxX = Math.max(0, boardWidth - start.w)
+    const xTargets = [0, maxX]
+    const yTargets = [0]
+    snapLayouts.forEach((layout) => {
+      const left = Number(layout.x || 0)
+      const right = Number(layout.x || 0) + Number(layout.w || 0)
+      const top = Number(layout.y || 0)
+      const bottom = Number(layout.y || 0) + Number(layout.h || 0)
+      xTargets.push(left, right, left - start.w, right - start.w)
+      yTargets.push(top, bottom, top - start.h, bottom - start.h)
+    })
+    const rawX = clampNumber(start.x + dx, 0, maxX)
+    const rawY = Math.max(0, start.y + dy)
     patchWatchWidgetLayout(widgetId, {
-      x: clampNumber(start.x + dx, 0, maxX),
-      y: Math.max(0, start.y + dy)
+      x: alignLayoutPixel(clampNumber(snapCoordinate(rawX, xTargets), 0, maxX)),
+      y: alignLayoutPixel(Math.max(0, snapCoordinate(rawY, yTargets)))
     })
     return
   }
 
   if (watchPointerState.mode === 'resize') {
     const maxWidth = Math.max(WATCH_WIDGET_MIN_WIDTH, boardWidth - start.x)
+    const rightTargets = [Number(start.x || 0) + Number(maxWidth || 0)]
+    const bottomTargets = []
+    snapLayouts.forEach((layout) => {
+      const left = Number(layout.x || 0)
+      const right = Number(layout.x || 0) + Number(layout.w || 0)
+      const top = Number(layout.y || 0)
+      const bottom = Number(layout.y || 0) + Number(layout.h || 0)
+      rightTargets.push(left, right)
+      bottomTargets.push(top, bottom)
+    })
+    const rawWidth = clampNumber(start.w + dx, WATCH_WIDGET_MIN_WIDTH, maxWidth)
+    const rawHeight = clampNumber(start.h + dy, WATCH_WIDGET_MIN_HEIGHT, 1800)
+    const rawRight = Number(start.x || 0) + Number(rawWidth || 0)
+    const rawBottom = Number(start.y || 0) + Number(rawHeight || 0)
+    const snappedRight = snapCoordinate(rawRight, rightTargets)
+    const snappedBottom = snapCoordinate(rawBottom, bottomTargets)
     patchWatchWidgetLayout(widgetId, {
-      w: clampNumber(start.w + dx, WATCH_WIDGET_MIN_WIDTH, maxWidth),
-      h: clampNumber(start.h + dy, WATCH_WIDGET_MIN_HEIGHT, 1800)
+      w: alignLayoutPixel(clampNumber(snappedRight - start.x, WATCH_WIDGET_MIN_WIDTH, maxWidth)),
+      h: alignLayoutPixel(clampNumber(snappedBottom - start.y, WATCH_WIDGET_MIN_HEIGHT, 1800))
     })
   }
 }
@@ -4999,12 +5240,13 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
 
     if (source.type === 'analysis_kline') {
       const target = getAnalysisTarget(source.params || {})
+      const analysisTitle = getAnalysisWidgetTitle(source.params || {})
       if (target.type === 'stock') {
         const res = await ApiService.getStockKline(target.value, target.days, null, 'chart')
         const chartHtml = pickChartHtml(res, target.value)
         return {
           ...source,
-          title: `${target.value} K线`,
+          title: analysisTitle,
           chartHtml: chartHtml || '<div>暂无个股图表</div>',
           error: chartHtml ? '' : '个股图表为空'
         }
@@ -5014,7 +5256,7 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
         const chartHtml = pickChartHtml(res, target.value)
         return {
           ...source,
-          title: `${target.value} K线`,
+          title: analysisTitle,
           chartHtml: chartHtml || '<div>暂无指数图表</div>',
           error: chartHtml ? '' : '指数图表为空'
         }
@@ -5026,7 +5268,7 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
       const chartHtml = pickChartHtml(res, target.value)
       return {
         ...source,
-        title: `${target.value} K线`,
+        title: analysisTitle,
         chartHtml: chartHtml || '<div>暂无板块图表</div>',
         error: chartHtml ? '' : '板块图表为空'
       }
@@ -5124,6 +5366,17 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
           total: groupItems.length,
           loaded: watchlistRows.length
         },
+        error: ''
+      }
+    }
+
+    if (source.type === 'daily_replay') {
+      const params = normalizeWidgetParams('daily_replay', source.params || {})
+      return {
+        ...source,
+        title: source.title || '每日复盘',
+        chartHtml: '',
+        replayRequirement: String(params.requirement || '').trim(),
         error: ''
       }
     }
@@ -5971,6 +6224,70 @@ const shouldHideAssistantMessage = (msg) => {
   const runAssistantId = String(strategyEditRun.value.assistantMessageId || '').trim()
   if (!runAssistantId || runAssistantId !== String(msg.id || '').trim()) return false
   return !String(msg.content || '').trim()
+}
+
+const runStrategyEditPrompt = async (text) => {
+  const content = String(text || '').trim()
+  if (!content) return false
+  if (!activeConversationId.value) await createConversation()
+  const payload = {
+    content,
+    resource_ids: selectedResourceIds.value,
+    conversation_mode: 'strategy_edit',
+    agent_name: MODE_AGENT_MAP.strategy_edit,
+    model: selectedModel.value,
+    strategy_id: activeStrategyId.value || '',
+    memory_profile_id: activeMemoryProfileId.value || '',
+    prompt_template_id: selectedPromptTemplateId.value,
+    prompt_template: effectivePromptTemplate.value
+  }
+
+  sending.value = true
+  try {
+    startStrategyEditRun(content)
+    let assistantRef = null
+    await ApiService.streamStrategyMessage(activeConversationId.value, payload, {
+      onMeta: (evt) => {
+        strategyEditRun.value.conversationId = String(evt?.conversation_id || strategyEditRun.value.conversationId || '')
+        strategyEditRun.value.bucket = activeConversationTitle.value || strategyEditRun.value.bucket || ''
+        const userMessage = evt.user_message
+        const assistantMessage = evt.assistant_message
+        if (userMessage) messages.value.push(userMessage)
+        if (assistantMessage) {
+          messages.value.push(assistantMessage)
+          assistantRef = messages.value[messages.value.length - 1]
+          strategyEditRun.value.assistantMessageId = String(assistantMessage.id || '')
+        }
+        scrollMessagesToBottom()
+      },
+      onDelta: (evt) => {
+        if (!assistantRef) return
+        const textChunk = evt.text || ''
+        if (textChunk) {
+          assistantRef.content = (assistantRef.content || '') + textChunk
+          stopStrategyEditRun()
+        }
+        scrollMessagesToBottom()
+      },
+      onDone: async () => {
+        stopStrategyEditRun()
+        await loadConversations()
+        await loadResources()
+        await scrollMessagesToBottom()
+      },
+      onError: (err) => {
+        stopStrategyEditRun()
+        if (err?.message) ElMessage.error(err.message)
+      }
+    })
+    return true
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('复盘执行失败')
+    return false
+  } finally {
+    sending.value = false
+  }
 }
 
 const sendMessage = async () => {
@@ -6940,17 +7257,17 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  overflow: visible;
+  gap: 0;
+  overflow: hidden;
 }
 
 .watch-content {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
   flex: 1 0 auto;
   min-height: auto;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .watch-placeholder {
@@ -6977,13 +7294,13 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   flex-direction: column;
   flex: 1 0 auto;
   min-height: auto;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .watch-layout-shell {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 12px;
+  gap: 0;
   flex: 1;
   min-height: 0;
 }
@@ -7103,10 +7420,10 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
 .watch-layout-board {
   position: relative;
-  border: 1px solid #e5e9f0;
+  border: 0;
   border-radius: 0;
-  background: #ffffff;
-  overflow: visible;
+  background: #e5e9f0;
+  overflow: hidden;
   min-height: 360px;
 }
 
@@ -7354,6 +7671,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   flex-direction: column;
   overflow: hidden;
   box-shadow: none;
+  box-sizing: border-box;
 }
 
 .watch-widget.editable {
@@ -7387,6 +7705,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 .widget-header-actions {
   display: flex;
   align-items: center;
+  gap: 4px;
 }
 
 .watch-widget-body {
@@ -7395,6 +7714,65 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   padding: 0;
   overflow: hidden;
   background: #fff;
+}
+
+.daily-replay-widget {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+}
+
+.daily-replay-head {
+  border-bottom: 1px solid #e5e9f0;
+  padding: 10px 12px;
+}
+
+.daily-replay-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2a3f55;
+}
+
+.daily-replay-sub {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #5f7388;
+}
+
+.daily-replay-content {
+  flex: 1;
+  min-height: 0;
+  padding: 10px 12px;
+  overflow: auto;
+}
+
+.daily-replay-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #44566b;
+  margin-bottom: 6px;
+}
+
+.daily-replay-requirement {
+  font-size: 12px;
+  color: #2f3f52;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.daily-replay-actions {
+  padding: 10px 12px;
+  border-top: 1px solid #e5e9f0;
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.daily-replay-config {
+  padding: 2px 0 4px;
 }
 
 .widget-watchlist {

@@ -38,6 +38,8 @@ export default {
     const diagMessages = ref([])
     let renderToken = 0
     const MAX_DIAG_LINES = 8
+    let resizeObserver = null
+    let resizeRaf = 0
 
     if (typeof window !== 'undefined' && !window.echarts) {
       window.echarts = echartsLib
@@ -87,6 +89,32 @@ export default {
         } catch (error) {
           console.error(error)
         }
+      })
+    }
+
+    const resizeChartsInHost = () => {
+      const host = hostRef.value
+      if (!host || !window.echarts) return
+      const nodes = host.querySelectorAll('div[id], .chart-container')
+      nodes.forEach((node) => {
+        try {
+          const inst = window.echarts.getInstanceByDom(node)
+          if (inst) {
+            inst.resize({
+              animation: false
+            })
+          }
+        } catch (error) {
+          console.error(error)
+        }
+      })
+    }
+
+    const scheduleResize = () => {
+      if (resizeRaf) cancelAnimationFrame(resizeRaf)
+      resizeRaf = requestAnimationFrame(() => {
+        resizeRaf = 0
+        resizeChartsInHost()
       })
     }
 
@@ -196,7 +224,9 @@ export default {
             const inst = window.echarts.getInstanceByDom(node)
             if (inst) {
               instanceCount += 1
-              inst.resize()
+              inst.resize({
+                animation: false
+              })
             }
           } catch (error) {
             console.error(error)
@@ -209,9 +239,41 @@ export default {
       } else {
         pushDiag('window.echarts 未挂载')
       }
+
+      scheduleResize()
+    }
+
+    const bindHostResize = () => {
+      const host = hostRef.value
+      if (!host || typeof window === 'undefined') return
+      if (typeof ResizeObserver !== 'undefined') {
+        resizeObserver = new ResizeObserver(() => {
+          scheduleResize()
+        })
+        resizeObserver.observe(host)
+        if (host.parentElement) {
+          resizeObserver.observe(host.parentElement)
+        }
+      }
+      window.addEventListener('resize', scheduleResize, { passive: true })
+    }
+
+    const unbindHostResize = () => {
+      if (resizeObserver) {
+        resizeObserver.disconnect()
+        resizeObserver = null
+      }
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('resize', scheduleResize)
+      }
+      if (resizeRaf) {
+        cancelAnimationFrame(resizeRaf)
+        resizeRaf = 0
+      }
     }
 
     onMounted(() => {
+      bindHostResize()
       renderChart()
     })
 
@@ -219,7 +281,12 @@ export default {
       renderChart()
     })
 
+    watch(() => props.height, () => {
+      scheduleResize()
+    })
+
     onBeforeUnmount(() => {
+      unbindHostResize()
       const host = hostRef.value
       if (host) disposeChartsInHost(host)
     })

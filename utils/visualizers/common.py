@@ -268,7 +268,8 @@ class UniversalKlineChart:
 
     @staticmethod
     def plot_kline_with_volume(data, title: str = None, height: str = "600px",
-                              volume_column: str = None, amount_column: str = None) -> str:
+                              volume_column: str = None, amount_column: str = None,
+                              show_inner_title: bool = False) -> str:
         """通用K线图绘制方法，支持指数、板块、个股
 
         Args:
@@ -396,9 +397,11 @@ class UniversalKlineChart:
         )
 
         # 设置K线图全局选项
+        show_inner_title = bool(show_inner_title and str(title or "").strip())
         kline.set_global_opts(
             title_opts=opts.TitleOpts(
-                title=title if title else "K线图",
+                is_show=show_inner_title,
+                title=str(title).strip() if show_inner_title else "",
                 pos_left="center",
             ),
             legend_opts=opts.LegendOpts(
@@ -516,6 +519,7 @@ class UniversalKlineChart:
         )
 
         # 创建网格布局
+        kline_top = "10%" if show_inner_title else "2%"
         grid = Grid(init_opts=opts.InitOpts(
             width="100%",
             height=height,
@@ -528,7 +532,7 @@ class UniversalKlineChart:
             grid_opts=opts.GridOpts(
                 pos_left="10%",
                 pos_right="8%",
-                pos_top="10%",
+                pos_top=kline_top,
                 height="60%"
             ),
         )
