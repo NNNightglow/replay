@@ -482,9 +482,9 @@ class UniversalKlineChart:
                     f"""function(params) {{
     var colorList = {color_list};
     if (colorList[params.dataIndex] > 0) {{
-        return '#ef232a';  // 上涨红色
+        return '#ef232a';
     }} else {{
-        return '#14b143';  // 下跌绿色
+        return '#14b143';
     }}
 }}"""
                 )
@@ -544,6 +544,20 @@ class UniversalKlineChart:
         )
 
         return grid.render_embed()  # 返回嵌入式HTML代码
+
+
+def plot_analysis_kline(data, entity_type: str = "auto", title: str = None, height: str = "600px") -> str:
+    """统一分析K线入口（common.py）。"""
+    kind = str(entity_type or "auto").strip().lower()
+    if kind not in {"auto", "stock", "index", "sector"}:
+        kind = "auto"
+    return UniversalKlineChart.plot_kline_with_volume(
+        data=data,
+        title=title,
+        height=height,
+        volume_column='成交量',
+        amount_column='成交额'
+    )
 
 
 class ChartFormatters:

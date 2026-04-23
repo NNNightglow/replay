@@ -6,7 +6,7 @@
 """
 
 
-from .common import ChartConfig, ChartUtils, ChartFormatters, UniversalKlineChart
+from .common import ChartConfig, ChartUtils, ChartFormatters, UniversalKlineChart, plot_analysis_kline
 from .index_visualizer import IndexVisualizer
 from .stock_visualizer import StockVisualizer
 from .sector_visualizer import SectorVisualizer
@@ -23,6 +23,7 @@ __all__ = [
     'ChartUtils',
     'ChartFormatters',
     'UniversalKlineChart',
+    'plot_analysis_kline',
 
     # 专门可视化器
     'IndexVisualizer',

@@ -560,9 +560,81 @@ class MarketMetadataManager:
             if stock_data is None or stock_data.is_empty():
                 print("股票日K元数据为空，无法预计算市场状态")
                 return False
-            
-            # 创建涨停跌停状态文件
-            create_limit_status_parquet(stock_data, self.market_states_path)
+
+            stock_data = _ensure_date_column(stock_data, '日期')
+
+            def _build_status_df(source_df: pl.DataFrame) -> pl.DataFrame:
+                status_df = compute_limits(source_df)
+                status_df = status_df.with_columns([
+                    pl.col('涨停').cast(pl.Boolean).alias('涨停'),
+                    pl.col('跌停').cast(pl.Boolean).alias('跌停'),
+                    pl.col('炸板').cast(pl.Boolean).alias('炸板')
+                ])
+                status_df = status_df.with_columns([
+                    pl.lit(0).cast(pl.Int32).alias('连板天数'),
+                    pl.lit(0).cast(pl.Int32).alias('连板数')
+                ])
+                status_df = calculate_continuous_limit_up_optimized(status_df)
+                try:
+                    status_df = calculate_stock_indicators(status_df)
+                    status_df = add_price_relative_indicators(status_df)
+                except Exception as _e:
+                    print(f"计算技术指标时出现问题，将继续保存基础状态数据: {_e}")
+                try:
+                    status_df = add_candlestick_trend_streaks(status_df)
+                except Exception as _e:
+                    print(f"计算趋势指标时出现问题，将继续保存: {_e}")
+                return status_df
+
+            existing_states = self.load_market_states()
+            existing_states = _ensure_date_column(existing_states, '日期') if existing_states is not None and not existing_states.is_empty() else None
+
+            stock_max_date = _parse_to_date(stock_data['日期'].max()) if '日期' in stock_data.columns else None
+            stock_min_date = _parse_to_date(stock_data['日期'].min()) if '日期' in stock_data.columns else None
+            old_max_date = _parse_to_date(existing_states['日期'].max()) if existing_states is not None and '日期' in existing_states.columns else None
+            old_min_date = _parse_to_date(existing_states['日期'].min()) if existing_states is not None and '日期' in existing_states.columns else None
+
+            # 若历史状态与股票数据已基本对齐，则仅重算近三年并回填，避免全量重算过慢。
+            aligned_history = (
+                existing_states is not None
+                and stock_max_date is not None
+                and old_max_date is not None
+                and stock_min_date is not None
+                and old_min_date is not None
+                and old_max_date == stock_max_date
+                and abs((old_min_date - stock_min_date).days) <= 31
+            )
+
+            if aligned_history and stock_max_date is not None:
+                cutoff_date = stock_max_date - timedelta(days=365 * 3)
+                print(f"历史状态已对齐股票数据，仅更新近三年: {cutoff_date} ~ {stock_max_date}")
+                recent_stock = stock_data.filter(pl.col('日期') >= pl.lit(cutoff_date))
+                recent_status = _build_status_df(recent_stock)
+
+                old_part = existing_states.filter(pl.col('日期') < pl.lit(cutoff_date)) if existing_states is not None else None
+                if old_part is not None and not old_part.is_empty():
+                    all_columns = list(dict.fromkeys(list(old_part.columns) + list(recent_status.columns)))
+
+                    def _align_columns(df: pl.DataFrame) -> pl.DataFrame:
+                        exprs = []
+                        for col in all_columns:
+                            if col in df.columns:
+                                exprs.append(pl.col(col))
+                            else:
+                                exprs.append(pl.lit(None).alias(col))
+                        return df.select(exprs)
+
+                    merged = pl.concat([_align_columns(old_part), _align_columns(recent_status)], how="vertical")
+                else:
+                    merged = recent_status
+
+                if '日期' in merged.columns and '代码' in merged.columns:
+                    merged = merged.unique(subset=["日期", "代码"], keep="last")
+                if not safe_write_parquet(merged, self.market_states_path):
+                    raise Exception(f"写入市场状态数据文件失败: {self.market_states_path}")
+            else:
+                # 创建涨停跌停状态文件（全量）
+                create_limit_status_parquet(stock_data, self.market_states_path)
             
             print("市场状态数据预计算完成")
             return True

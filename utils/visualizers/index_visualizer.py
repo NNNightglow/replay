@@ -174,7 +174,6 @@ class IndexVisualizer:
                                 try {
                                   if (!params || !params.length) return '';
                                   var axisValue = params[0].axisValue;
-                                  // 确保日期为 yyyy-mm-dd
                                   var dv = String(axisValue);
                                   if (/^\d{8}$/.test(dv)) {
                                     axisValue = dv.slice(0,4) + '-' + dv.slice(4,6) + '-' + dv.slice(6,8);
@@ -184,7 +183,6 @@ class IndexVisualizer:
                                   for (var i = 0; i < params.length; i++) {
                                       if (params[i] && params[i].seriesType === 'candlestick') { kParam = params[i]; break; }
                                   }
-                                  // 兼容性回退：有些情况下seriesType识别异常，尝试通过数据形状识别K线
                                   if (!kParam) {
                                       for (var i = 0; i < params.length; i++) {
                                           var d = params[i] && params[i].data;
@@ -208,7 +206,6 @@ class IndexVisualizer:
                                         }
                                       }
                                   }
-                                  // 补充其他系列（均线、成交量）
                                   for (var j = 0; j < params.length; j++) {
                                       var p = params[j];
                                       if (p.seriesType !== 'candlestick' && p.seriesName !== '成交额') {
@@ -220,7 +217,6 @@ class IndexVisualizer:
                                   }
                                   return lines.join('<br/>');
                                 } catch (e) {
-                                  // 如果formatter异常，至少返回日期，避免无内容
                                   try {
                                     var fallback = (params && params.length) ? params[0].axisValue : '';
                                     var s = String(fallback);

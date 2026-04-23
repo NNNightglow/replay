@@ -93,6 +93,20 @@ _STORE_LOCK = threading.Lock()
 _JOB_LOCK = threading.Lock()
 _AGENT_LOG_LOCK = threading.Lock()
 _JOBS: Dict[str, Dict] = {}
+_STOCK_PROFILE_CACHE_LOCK = threading.Lock()
+_STOCK_PROFILE_CACHE: Dict[str, Any] = {
+    "path": "",
+    "mtime": 0.0,
+    "columns": [],
+    "code_col": "",
+    "name_col": "",
+    "tags_col": "",
+    "profile_col": "",
+    "updated_col": "",
+    "by_code": {},
+    "by_name": {},
+    "loaded_at": "",
+}
 
 
 def _canonical_model_name(model_name: str) -> str:
@@ -119,6 +133,201 @@ def _canonical_model_name(model_name: str) -> str:
         if tail.lower().startswith("deepseek-"):
             return tail
     return raw
+
+
+def _normalize_stock_code_text(value: Any) -> str:
+    digits = re.sub(r"\D+", "", str(value or ""))
+    if not digits:
+        return ""
+    return digits[-6:].zfill(6)
+
+
+def _normalize_lookup_name(value: Any) -> str:
+    return str(value or "").strip().lower()
+
+
+def _coerce_profile_cell_text(value: Any, *, is_datetime: bool = False) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, float):
+        try:
+            if value != value:  # NaN
+                return ""
+        except Exception:
+            pass
+    if isinstance(value, (list, tuple, set)):
+        parts = [str(item).strip() for item in value if str(item).strip()]
+        return "、".join(parts)
+    if hasattr(value, "isoformat"):
+        try:
+            iso = value.isoformat()
+            if "T" in iso:
+                return iso.replace("T", " ")[:19]
+            return iso[:19]
+        except Exception:
+            pass
+    text = str(value).strip()
+    if not text:
+        return ""
+    if is_datetime:
+        text = text.replace("T", " ")
+        return text[:19]
+    return text
+
+
+def _pick_profile_column(columns: List[str], aliases: List[str]) -> str:
+    if not columns:
+        return ""
+    lower_map = {str(col).lower(): str(col) for col in columns}
+    for alias in aliases:
+        hit = lower_map.get(alias.lower())
+        if hit:
+            return hit
+    for col in columns:
+        lowered = str(col).lower()
+        if any(alias.lower() in lowered for alias in aliases):
+            return str(col)
+    return ""
+
+
+def _resolve_stock_profile_parquet() -> Optional[Path]:
+    other_dir = BASE_DIR / "data_cache" / "other"
+    if not other_dir.exists() or not other_dir.is_dir():
+        return None
+    files = sorted([p for p in other_dir.glob("*.parquet") if p.is_file()])
+    if not files:
+        return None
+    if len(files) == 1:
+        return files[0]
+
+    def _score(path: Path) -> int:
+        name = path.name.lower()
+        score = 0
+        if "stock" in name or "股票" in name:
+            score += 5
+        if "profile" in name or "资料" in name or "meta" in name:
+            score += 3
+        if "other" in str(path.parent).lower():
+            score += 1
+        return score
+
+    files.sort(key=lambda item: (_score(item), item.name.lower()), reverse=True)
+    return files[0]
+
+
+def _build_stock_profile_index(force_reload: bool = False) -> Tuple[bool, str]:
+    parquet_path = _resolve_stock_profile_parquet()
+    if not parquet_path:
+        with _STOCK_PROFILE_CACHE_LOCK:
+            _STOCK_PROFILE_CACHE.update(
+                {
+                    "path": "",
+                    "mtime": 0.0,
+                    "columns": [],
+                    "code_col": "",
+                    "name_col": "",
+                    "tags_col": "",
+                    "profile_col": "",
+                    "updated_col": "",
+                    "by_code": {},
+                    "by_name": {},
+                    "loaded_at": _now_iso(),
+                }
+            )
+        return False, "未在 data_cache/other 下找到 parquet 文件"
+
+    try:
+        mtime = float(parquet_path.stat().st_mtime)
+    except Exception:
+        mtime = 0.0
+
+    with _STOCK_PROFILE_CACHE_LOCK:
+        if (
+            not force_reload
+            and _STOCK_PROFILE_CACHE.get("path") == str(parquet_path)
+            and abs(float(_STOCK_PROFILE_CACHE.get("mtime") or 0.0) - mtime) < 1e-6
+            and _STOCK_PROFILE_CACHE.get("loaded_at")
+        ):
+            return True, ""
+
+    try:
+        import polars as pl  # type: ignore
+
+        df = pl.read_parquet(str(parquet_path))
+    except Exception as exc:
+        return False, f"读取 parquet 失败: {exc}"
+
+    columns = [str(col) for col in getattr(df, "columns", [])]
+    code_col = _pick_profile_column(columns, ["代码", "stock_code", "code", "symbol", "ts_code"])
+    name_col = _pick_profile_column(columns, ["名称", "stock_name", "name", "简称"])
+    tags_col = _pick_profile_column(columns, ["股票标签", "标签", "stock_tags", "tags", "concept_tags"])
+    profile_col = _pick_profile_column(columns, ["股票资料", "资料", "stock_profile", "profile", "简介", "description"])
+    updated_col = _pick_profile_column(columns, ["更新时间", "updated_at", "update_time", "last_update", "updated"])
+
+    if not code_col and not name_col:
+        return False, "parquet 中未识别到代码或名称字段"
+
+    by_code: Dict[str, Dict[str, Any]] = {}
+    by_name: Dict[str, Dict[str, Any]] = {}
+    rows = df.to_dicts()
+    for raw in rows:
+        row = raw if isinstance(raw, dict) else {}
+        code = _normalize_stock_code_text(row.get(code_col) if code_col else "")
+        name = _coerce_profile_cell_text(row.get(name_col) if name_col else "")
+        stock_tags = _coerce_profile_cell_text(row.get(tags_col) if tags_col else "")
+        stock_profile = _coerce_profile_cell_text(row.get(profile_col) if profile_col else "")
+        profile_updated_at = _coerce_profile_cell_text(
+            row.get(updated_col) if updated_col else "",
+            is_datetime=True,
+        )
+        if not code and not name:
+            continue
+        record = {
+            "code": code,
+            "name": name,
+            "stock_tags": stock_tags,
+            "stock_profile": stock_profile,
+            "profile_updated_at": profile_updated_at,
+        }
+        if code:
+            existing = by_code.get(code) or {}
+            merged = {
+                "code": code,
+                "name": record["name"] or existing.get("name", ""),
+                "stock_tags": record["stock_tags"] or existing.get("stock_tags", ""),
+                "stock_profile": record["stock_profile"] or existing.get("stock_profile", ""),
+                "profile_updated_at": record["profile_updated_at"] or existing.get("profile_updated_at", ""),
+            }
+            by_code[code] = merged
+        normalized_name = _normalize_lookup_name(name)
+        if normalized_name:
+            existing = by_name.get(normalized_name) or {}
+            merged = {
+                "code": record["code"] or existing.get("code", ""),
+                "name": name or existing.get("name", ""),
+                "stock_tags": record["stock_tags"] or existing.get("stock_tags", ""),
+                "stock_profile": record["stock_profile"] or existing.get("stock_profile", ""),
+                "profile_updated_at": record["profile_updated_at"] or existing.get("profile_updated_at", ""),
+            }
+            by_name[normalized_name] = merged
+
+    with _STOCK_PROFILE_CACHE_LOCK:
+        _STOCK_PROFILE_CACHE.update(
+            {
+                "path": str(parquet_path),
+                "mtime": mtime,
+                "columns": columns,
+                "code_col": code_col,
+                "name_col": name_col,
+                "tags_col": tags_col,
+                "profile_col": profile_col,
+                "updated_col": updated_col,
+                "by_code": by_code,
+                "by_name": by_name,
+                "loaded_at": _now_iso(),
+            }
+        )
+    return True, ""
 
 
 def _load_env_files() -> None:
@@ -2529,6 +2738,7 @@ def _build_visualization_prompt(
 
 允许的widget.type：
 - market_sentiment_chart（市场情绪单图）
+- analysis_kline（统一分析K线，自动匹配股票/指数/板块）
 - index_kline（指数K线）
 - sector_kline（板块K线）
 - stock_kline（个股K线）
@@ -2538,6 +2748,11 @@ market_sentiment_chart.params 约束：
 - chart_key 仅允许：
   red_ratio_and_amount / limit_up_count / ground_ceiling_count / continuous_limit_up / change_distribution
 - days_back 为10~240整数，默认30
+
+analysis_kline.params 约束：
+- target_type 可选：auto / stock / index / sector，默认auto
+- target_value：当stock时为6位代码；当index/sector时为名称
+- days 为20~500整数，默认120
 
 index_kline.params 约束：
 - index_name 例如“上证指数”
@@ -2608,8 +2823,8 @@ def _normalize_strategy_widget_for_merge(widget: Dict[str, Any], index: int = 0)
     title = str(widget.get("title") or "").strip() or widget_type
     layout_src = widget.get("layout") if isinstance(widget.get("layout"), dict) else {}
 
-    default_w = 620.0 if widget_type in {"index_kline", "sector_kline", "stock_kline"} else 500.0
-    default_h = 520.0 if widget_type in {"index_kline", "sector_kline", "stock_kline"} else 420.0
+    default_w = 620.0 if widget_type in {"analysis_kline", "index_kline", "sector_kline", "stock_kline"} else 500.0
+    default_h = 520.0 if widget_type in {"analysis_kline", "index_kline", "sector_kline", "stock_kline"} else 420.0
     layout = {
         "x": max(0.0, _safe_number(layout_src.get("x"), 0.0)),
         "y": max(0.0, _safe_number(layout_src.get("y"), float(index * 320))),
@@ -3682,6 +3897,168 @@ def strategy_watch_runtime():
 @strategy_watch_bp.route("/api/strategy-watch/agents", methods=["GET"])
 def strategy_watch_agents():
     return jsonify({"success": True, "data": list_agent_profiles(), "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/debug/link-log", methods=["POST"])
+def strategy_watch_debug_link_log():
+    payload = request.get_json(silent=True) or {}
+    try:
+        status = str(payload.get("status") or "").strip() or "unknown"
+        widget_id = str(payload.get("watchlist_widget_id") or "").strip()
+        link_group = str(payload.get("link_group") or "").strip()
+        source = payload.get("source") if isinstance(payload.get("source"), dict) else {}
+        targets = payload.get("matched_targets") if isinstance(payload.get("matched_targets"), list) else []
+        print(
+            "[strategy-watch][link-debug]",
+            json.dumps(
+                {
+                    "status": status,
+                    "watchlist_widget_id": widget_id,
+                    "link_group": link_group,
+                    "source": {
+                        "type": str(source.get("type") or ""),
+                        "code": str(source.get("code") or ""),
+                        "name": str(source.get("name") or ""),
+                    },
+                    "matched_targets": targets[:20],
+                    "ts": _now_iso(),
+                },
+                ensure_ascii=False,
+            ),
+        )
+    except Exception as exc:
+        print(f"[strategy-watch][link-debug] log failed: {exc}")
+    return jsonify({"success": True, "data": {"ok": True}, "timestamp": _now_iso()})
+
+
+@strategy_watch_bp.route("/api/strategy-watch/stock-profiles/query", methods=["POST"])
+def query_strategy_watch_stock_profiles():
+    payload = request.get_json(silent=True) or {}
+    raw_codes = payload.get("codes")
+    raw_names = payload.get("names")
+    raw_query = str(payload.get("query") or "").strip()
+    force_reload = bool(payload.get("force_reload", False))
+    try:
+        max_rows = int(payload.get("max_rows", 2000) or 2000)
+    except Exception:
+        max_rows = 2000
+    max_rows = max(1, min(20000, max_rows))
+
+    codes: List[str] = []
+    names: List[str] = []
+    if isinstance(raw_codes, list):
+        codes.extend([_normalize_stock_code_text(item) for item in raw_codes])
+    if isinstance(raw_names, list):
+        names.extend([str(item or "").strip() for item in raw_names])
+    if raw_query:
+        for token in re.split(r"[\s,，;；]+", raw_query):
+            one = token.strip()
+            if not one:
+                continue
+            code = _normalize_stock_code_text(one)
+            if code:
+                codes.append(code)
+            else:
+                names.append(one)
+
+    code_terms = []
+    seen_code = set()
+    for code in codes:
+        if not code or code in seen_code:
+            continue
+        seen_code.add(code)
+        code_terms.append(code)
+
+    name_terms = []
+    seen_name = set()
+    for name in names:
+        normalized = _normalize_lookup_name(name)
+        if not normalized or normalized in seen_name:
+            continue
+        seen_name.add(normalized)
+        name_terms.append(normalized)
+
+    ok, err = _build_stock_profile_index(force_reload=force_reload)
+    with _STOCK_PROFILE_CACHE_LOCK:
+        cache_snapshot = dict(_STOCK_PROFILE_CACHE)
+
+    if not ok:
+        return jsonify(
+            {
+                "success": True,
+                "data": {
+                    "available": False,
+                    "error": err,
+                    "rows": [],
+                    "query": {"codes": code_terms, "names": name_terms},
+                    "meta": {
+                        "parquet_path": cache_snapshot.get("path", ""),
+                        "columns": cache_snapshot.get("columns", []),
+                        "loaded_at": cache_snapshot.get("loaded_at", ""),
+                    },
+                },
+                "timestamp": _now_iso(),
+            }
+        )
+
+    by_code = cache_snapshot.get("by_code") if isinstance(cache_snapshot.get("by_code"), dict) else {}
+    by_name = cache_snapshot.get("by_name") if isinstance(cache_snapshot.get("by_name"), dict) else {}
+    rows: List[Dict[str, Any]] = []
+    dedupe = set()
+
+    def _push(record: Dict[str, Any]) -> None:
+        code = str(record.get("code") or "").strip()
+        name = str(record.get("name") or "").strip()
+        key = f"{code}|{name}".strip("|")
+        if not key or key in dedupe:
+            return
+        dedupe.add(key)
+        rows.append(
+            {
+                "code": code,
+                "name": name,
+                "stock_tags": str(record.get("stock_tags") or "").strip(),
+                "stock_profile": str(record.get("stock_profile") or "").strip(),
+                "profile_updated_at": str(record.get("profile_updated_at") or "").strip(),
+            }
+        )
+
+    for code in code_terms:
+        if len(rows) >= max_rows:
+            break
+        record = by_code.get(code)
+        if isinstance(record, dict):
+            _push(record)
+
+    for name in name_terms:
+        if len(rows) >= max_rows:
+            break
+        record = by_name.get(name)
+        if isinstance(record, dict):
+            _push(record)
+
+    return jsonify(
+        {
+            "success": True,
+            "data": {
+                "available": True,
+                "rows": rows,
+                "total": len(rows),
+                "query": {"codes": code_terms, "names": name_terms},
+                "meta": {
+                    "parquet_path": cache_snapshot.get("path", ""),
+                    "columns": cache_snapshot.get("columns", []),
+                    "code_col": cache_snapshot.get("code_col", ""),
+                    "name_col": cache_snapshot.get("name_col", ""),
+                    "tags_col": cache_snapshot.get("tags_col", ""),
+                    "profile_col": cache_snapshot.get("profile_col", ""),
+                    "updated_col": cache_snapshot.get("updated_col", ""),
+                    "loaded_at": cache_snapshot.get("loaded_at", ""),
+                },
+            },
+            "timestamp": _now_iso(),
+        }
+    )
 
 
 @strategy_watch_bp.route("/api/strategy-watch/resources", methods=["GET"])

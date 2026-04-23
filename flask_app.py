@@ -424,7 +424,7 @@ def manual_data_update(target):
 
     try:
         if normalized_target == 'stocks':
-            update_success = data_fetcher.stock_metadata_manager.update_metadata()
+            update_success = data_fetcher.stock_metadata_manager.update_metadata(include_bjs_update=False)
             if update_success:
                 stock_metadata = data_fetcher.stock_metadata_manager.load_metadata()
                 message = '股票数据更新成功'
@@ -2511,6 +2511,84 @@ def get_market_volume():
             'timestamp': datetime.now().isoformat()
         }), 500
 
+def _resolve_index_query_to_code(index_query: str) -> str:
+    """将指数查询参数（名称/代码/带交易所前缀）统一解析为6位代码。"""
+    query = str(index_query or '').strip()
+    if not query:
+        return query
+    upper = query.upper()
+    if re.match(r'^(SH|SZ)\d{6}$', upper):
+        return upper[-6:]
+    if re.match(r'^1B\d{4,6}$', upper):
+        return upper[2:].zfill(6)[-6:]
+    if re.match(r'^\d{6}$', upper):
+        return upper
+
+    if data_fetcher is None:
+        return query
+    try:
+        index_manager = getattr(data_fetcher, 'index_metadata_manager', None)
+        if index_manager is None:
+            return query
+        metadata = index_manager.load_metadata()
+        if metadata is None or metadata.is_empty():
+            return query
+        code_col = '代码' if '代码' in metadata.columns else None
+        name_col = '名称' if '名称' in metadata.columns else None
+        if not code_col or not name_col:
+            return query
+        matched = metadata.filter(pl.col(name_col) == query)
+        if matched is None or matched.is_empty():
+            return query
+        code_val = str(matched.select(pl.col(code_col)).to_series().head(1).to_list()[0] or '').strip()
+        return code_val if code_val else query
+    except Exception:
+        return query
+
+
+def _resolve_sector_query_to_name(sector_query: str) -> str:
+    """将板块查询参数（名称/代码）统一解析为板块名称。"""
+    query = str(sector_query or '').strip()
+    if not query:
+        return query
+    if data_fetcher is None:
+        return query
+    try:
+        sector_manager = getattr(data_fetcher, 'sector_data_manager', None)
+        if sector_manager is None:
+            return query
+        sector_data = sector_manager.load_sector_data()
+        if sector_data is None or sector_data.is_empty():
+            return query
+        code_col = '板块代码' if '板块代码' in sector_data.columns else None
+        name_col = '板块名称' if '板块名称' in sector_data.columns else None
+        if not name_col:
+            return query
+        if code_col:
+            by_code = sector_data.filter(pl.col(code_col).cast(pl.Utf8, strict=False) == query)
+            if by_code is not None and not by_code.is_empty():
+                return str(by_code.select(pl.col(name_col)).to_series().head(1).to_list()[0] or query)
+        by_name = sector_data.filter(pl.col(name_col) == query)
+        if by_name is not None and not by_name.is_empty():
+            return query
+    except Exception:
+        pass
+    # 回退东财板块码表（BKxxxx）
+    try:
+        dc_path = os.path.join('data_cache', 'sectors', 'sectors_dc.parquet')
+        if os.path.exists(dc_path):
+            dc_df = pl.read_parquet(dc_path)
+            code_col = '板块代码' if '板块代码' in dc_df.columns else None
+            name_col = '板块名称' if '板块名称' in dc_df.columns else None
+            if code_col and name_col:
+                hit = dc_df.filter(pl.col(code_col).cast(pl.Utf8, strict=False) == query)
+                if hit is not None and not hit.is_empty():
+                    return str(hit.select(pl.col(name_col)).to_series().head(1).to_list()[0] or query)
+    except Exception:
+        pass
+    return query
+
+
 @app.route('/api/indices/kline', methods=['GET', 'POST'])
 def get_indices_kline():
     """指数K线图API - 支持单个或多个指数"""
@@ -2550,9 +2628,10 @@ def get_indices_kline():
         if format_type == 'data':
             # 返回数据格式
             for index_name in indices:
+                resolved_index_code = _resolve_index_query_to_code(index_name)
                 # 获取指数数据
                 index_data = data_fetcher.index_metadata_manager.get_index_data(
-                    index_name,
+                    resolved_index_code,
                     start_date=None,
                     end_date=None
                 )
@@ -2576,8 +2655,9 @@ def get_indices_kline():
             if len(indices) == 1:
                 # 单个指数图表
                 single_index_name = indices[0]
+                resolved_index_code = _resolve_index_query_to_code(single_index_name)
                 single_index_data = data_fetcher.index_metadata_manager.get_index_data(
-                    single_index_name,
+                    resolved_index_code,
                     start_date=None,
                     end_date=None
                 )
@@ -2621,8 +2701,9 @@ def get_indices_kline():
         elif format_type == 'both':
             # 返回数据和图表
             for index_name in indices:
+                resolved_index_code = _resolve_index_query_to_code(index_name)
                 index_data = data_fetcher.index_metadata_manager.get_index_data(
-                    index_name,
+                    resolved_index_code,
                     start_date=None,
                     end_date=None
                 )
@@ -3242,11 +3323,12 @@ def get_sector_kline(sector_name):
         format_type = request.args.get('format', 'chart')  # 支持 'chart' 和 'data' 格式
         target_date = request.args.get('date')  # 支持指定日期
 
-        print(f"🔍 生成板块K线图: {sector_name}, 天数: {days_range}, 格式: {format_type}, 日期: {target_date}")
+        resolved_sector_name = _resolve_sector_query_to_name(sector_name)
+        print(f"🔍 生成板块K线图: {sector_name} -> {resolved_sector_name}, 天数: {days_range}, 格式: {format_type}, 日期: {target_date}")
 
         if format_type == 'data':
             # 返回原始数据，让前端用原生ECharts渲染
-            sector_data = data_fetcher.get_sector_kline_data(sector_name, days_range, target_date)
+            sector_data = data_fetcher.get_sector_kline_data(resolved_sector_name, days_range, target_date)
             
             if sector_data is None or sector_data.is_empty():
                 return jsonify({
@@ -3271,8 +3353,8 @@ def get_sector_kline(sector_name):
             
             return jsonify({
                 'success': True,
-                'data': {
-                    'sector_name': sector_name,
+                    'data': {
+                    'sector_name': resolved_sector_name,
                     'days_range': days_range,
                     'kline_data': formatted_data,
                     'total_records': len(formatted_data)
@@ -3284,7 +3366,7 @@ def get_sector_kline(sector_name):
             # 原有的HTML格式（保持兼容性）
             chart_html = SectorVisualizer.plot_single_sector_kline(
                 data_fetcher,
-                sector_name=sector_name,
+                sector_name=resolved_sector_name,
                 overlay_index=None,  # 不再支持叠加指数
                 days_range=days_range
             )
@@ -3292,7 +3374,7 @@ def get_sector_kline(sector_name):
             return jsonify({
                 'success': True,
                 'data': {
-                    'sector_name': sector_name,
+                    'sector_name': resolved_sector_name,
                     'days_range': days_range,
                     'chart_html': chart_html
                 },

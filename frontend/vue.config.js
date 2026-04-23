@@ -1,3 +1,4 @@
+const path = require('path')
 const { defineConfig } = require('@vue/cli-service')
 
 module.exports = defineConfig({
@@ -44,6 +45,11 @@ module.exports = defineConfig({
 
   // 性能优化
   configureWebpack: {
+    resolve: {
+      alias: {
+        '@visualizers': path.resolve(__dirname, '../utils/visualizers')
+      }
+    },
     optimization: {
       splitChunks: {
         chunks: 'all',

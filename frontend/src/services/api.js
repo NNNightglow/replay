@@ -524,6 +524,10 @@ class ApiService {
     return api.get('/api/strategy-watch/agent-logs', { params, hideLoading: true })
   }
 
+  static async postStrategyWatchLinkDebug(payload = {}) {
+    return api.post('/api/strategy-watch/debug/link-log', payload, { hideLoading: true, timeout: 15000 })
+  }
+
   static async getMemoryProfiles() {
     return api.get('/api/strategy-watch/memory-profiles')
   }

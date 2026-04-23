@@ -485,56 +485,126 @@
           <div v-if="activeStrategy" class="watch-content">
             <div v-if="isKeyLevelStrategy" class="key-board">
               <div class="key-toolbar">
-                <el-autocomplete
-                  v-model="keyStockSearchQuery"
-                  :fetch-suggestions="queryKeyWatchStockSuggestions"
-                  placeholder="输入股票代码或名称添加自选"
-                  style="width: 320px"
-                  clearable
-                  @select="onWatchStockSuggestionSelect"
-                  @keyup.enter="addWatchStockFromInput"
-                />
-                <div class="key-toolbar-actions">
-                  <el-select v-model="keyLevelWindowDays" style="width: 140px" @change="onKeyLevelWindowChange">
-                    <el-option :value="250" label="近1年关键位" />
-                    <el-option :value="730" label="近2年关键位" />
-                    <el-option :value="1825" label="近5年关键位" />
-                    <el-option :value="3650" label="近10年关键位" />
+                <div class="key-toolbar-left">
+                  <el-autocomplete
+                    v-model="keyStockSearchQuery"
+                    :fetch-suggestions="queryKeyWatchStockSuggestions"
+                    placeholder="输入股票代码或名称添加自选"
+                    style="width: 300px"
+                    clearable
+                    @select="onWatchStockSuggestionSelect"
+                    @keyup.enter="addWatchStockFromInput"
+                  />
+                  <div class="key-toolbar-actions">
+                    <el-select v-model="keyLevelWindowDays" style="width: 138px" @change="onKeyLevelWindowChange">
+                      <el-option :value="250" label="近1年关键位" />
+                      <el-option :value="730" label="近2年关键位" />
+                      <el-option :value="1825" label="近5年关键位" />
+                      <el-option :value="3650" label="近10年关键位" />
+                    </el-select>
+                    <el-select v-model="keyChartMode" style="width: 114px">
+                      <el-option
+                        v-for="item in keyChartModeOptions"
+                        :key="`key-chart-mode-${item.value}`"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <el-select v-model="keyAdjustMode" style="width: 114px">
+                      <el-option
+                        v-for="item in keyAdjustModeOptions"
+                        :key="`key-adjust-mode-${item.value}`"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <el-select v-model="keySubIndicatorMode" style="width: 124px">
+                      <el-option
+                        v-for="item in keySubIndicatorModeOptions"
+                        :key="`key-sub-indicator-${item.value}`"
+                        :label="item.label"
+                        :value="item.value"
+                      />
+                    </el-select>
+                    <el-button :disabled="!keySelectedCode" :loading="keyKlineLoading" @click="loadKeyStockKline(keySelectedCode)">
+                      刷新
+                    </el-button>
+                  </div>
+                </div>
+                <div class="key-toolbar-right">
+                  <el-select v-model="keyWatchGroupBy" style="width: 108px">
+                    <el-option
+                      v-for="item in keyWatchGroupByOptions"
+                      :key="`key-group-by-${item.value}`"
+                      :label="item.label"
+                      :value="item.value"
+                    />
                   </el-select>
-                  <el-button :disabled="!keySelectedCode" :loading="keyKlineLoading" @click="loadKeyStockKline(keySelectedCode)">
-                    刷新K线
+                  <el-select v-model="keyWatchFilterGroup" style="width: 138px">
+                    <el-option
+                      v-for="item in keyWatchGroupFilterOptions"
+                      :key="`key-group-filter-${item.value}`"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <el-select v-model="keyWatchSortField" style="width: 128px">
+                    <el-option
+                      v-for="item in keyWatchSortFieldOptions"
+                      :key="`key-sort-${item.value}`"
+                      :label="item.label"
+                      :value="item.value"
+                    />
+                  </el-select>
+                  <el-button link @click="toggleKeyWatchSortOrder">
+                    {{ keyWatchSortOrder === 'desc' ? '降序' : '升序' }}
                   </el-button>
                 </div>
               </div>
 
               <div ref="keyBoardBodyRef" class="key-board-body">
                 <div class="key-watchlist" :style="{ width: `${keyPaneWidthPercent}%` }">
-                  <div class="key-watchlist-header">自选股 ({{ keyWatchlist.length }})</div>
-                  <div class="key-watchlist-list">
-                    <div
-                      v-for="item in keyWatchlist"
-                      :key="item.code"
-                      class="key-watch-item"
-                      :class="{ active: item.code === keySelectedCode }"
-                      @click="selectWatchStock(item.code)"
-                    >
-                      <div class="row-top">
-                        <span class="name">{{ item.name }}</span>
-                        <span class="code">{{ item.code }}</span>
+                  <div class="key-watchlist-header">
+                    <span>自选股 ({{ keyWatchlist.length }})</span>
+                    <span class="key-watchlist-sub">虚拟表格 · {{ keyWatchGroupByLabel }}</span>
+                  </div>
+                  <div ref="keyWatchListRef" class="key-watchlist-list" @scroll="onKeyWatchListScroll">
+                    <div :style="{ height: `${keyWatchVirtualPaddingTop}px` }"></div>
+                    <template v-for="row in keyWatchVisibleRows" :key="row.id">
+                      <div v-if="row.type === 'group'" class="key-watch-group-row">
+                        <span>{{ row.label }}</span>
+                        <span>{{ row.count }} 只</span>
                       </div>
-                      <div class="row-mid">
-                        <span class="price">{{ formatWatchPrice(item.latest_price) }}</span>
-                        <span class="change" :class="watchChangeClass(item.change_pct)">
-                          {{ formatWatchChange(item.change_pct) }}
-                        </span>
+                      <div
+                        v-else
+                        class="key-watch-item"
+                        :class="{ active: row.item.code === keySelectedCode }"
+                        @click="selectWatchStock(row.item.code)"
+                      >
+                        <div class="row-top">
+                          <span class="name">{{ row.item.name }}</span>
+                          <span class="code">{{ row.item.code }}</span>
+                        </div>
+                        <div class="row-mid">
+                          <span class="price">{{ formatWatchPrice(row.item.latest_price) }}</span>
+                          <span class="change" :class="watchChangeClass(row.item.change_pct)">
+                            {{ formatWatchChange(row.item.change_pct) }}
+                          </span>
+                        </div>
+                        <div class="row-bottom">
+                          <span>成交额 {{ formatWatchAmount(row.item.amount) }}</span>
+                          <span>成交量 {{ formatWatchVolume(row.item.volume) }}</span>
+                        </div>
+                        <div class="row-actions">
+                          <el-tag size="small" effect="plain">{{ resolveWatchGroupLabel(row.item, 'custom') }}</el-tag>
+                          <el-button link @click.stop="renameWatchStockGroup(row.item)">分组</el-button>
+                          <el-button type="danger" link @click.stop="removeWatchStock(row.item.code)">删除</el-button>
+                        </div>
                       </div>
-                      <div class="row-bottom">
-                        <span>成交额 {{ formatWatchAmount(item.amount) }}</span>
-                        <el-button type="danger" link @click.stop="removeWatchStock(item.code)">删除</el-button>
-                      </div>
-                    </div>
+                    </template>
+                    <div :style="{ height: `${keyWatchVirtualPaddingBottom}px` }"></div>
                     <el-empty
-                      v-if="!keyWatchlist.length"
+                      v-if="!keyWatchFlatRows.length"
                       description="还没有自选股，先在上方搜索添加"
                       :image-size="72"
                     />
@@ -545,10 +615,19 @@
 
                 <div class="key-chart-panel">
                   <div class="key-chart-title">
-                    <span v-if="keySelectedStock">
-                      {{ keySelectedStock.name }} ({{ keySelectedStock.code }}) K线 + 关键位
-                    </span>
+                    <template v-if="keySelectedStock">
+                      <span>{{ keySelectedStock.name }} ({{ keySelectedStock.code }})</span>
+                      <el-tag size="small" effect="plain">{{ keyChartModeLabel }}</el-tag>
+                      <el-tag size="small" effect="plain">{{ keyAdjustModeLabel }}</el-tag>
+                      <el-tag size="small" type="info" effect="plain">{{ keySubIndicatorModeLabel }}</el-tag>
+                    </template>
                     <span v-else>请选择左侧股票查看K线</span>
+                  </div>
+                  <div v-if="keyChartMode === 'time'" class="key-chart-hint">
+                    当前无分钟数据，分时模式使用日线收盘走势替代显示。
+                  </div>
+                  <div v-if="keyAdjustMode !== 'none'" class="key-chart-hint">
+                    当前数据源不区分复权口径，已保留复权切换状态位用于后续扩展。
                   </div>
                   <div v-if="keyKlineLoading" class="watch-placeholder">
                     <div class="placeholder-title">正在加载K线数据...</div>
@@ -558,7 +637,12 @@
                     <div class="placeholder-desc">{{ keyWatchError }}</div>
                   </div>
                   <div v-else-if="keyKlineData.length" class="key-chart-wrap">
-                    <VChart :option="keyKlineOption" autoresize style="height: 100%; width: 100%" />
+                    <VChart
+                      :option="keyKlineOption"
+                      :init-options="keyChartInitOptions"
+                      autoresize
+                      style="height: 100%; width: 100%"
+                    />
                   </div>
                   <div v-else class="watch-placeholder">
                     <div class="placeholder-title">暂无K线数据</div>
@@ -634,6 +718,33 @@
                     >
                       <span>{{ widget.title }}</span>
                       <div class="widget-header-actions">
+                        <el-dropdown
+                          v-if="widget.type === 'watchlist_panel' || isAnalysisWidgetType(widget.type)"
+                          trigger="click"
+                          @command="(cmd) => setWidgetLinkGroup(widget, cmd)"
+                        >
+                          <el-button size="small" link>联动组{{ getWatchlistLinkGroupLabel(widget) }}</el-button>
+                          <template #dropdown>
+                            <el-dropdown-menu>
+                              <el-dropdown-item command="">（无）</el-dropdown-item>
+                              <el-dropdown-item
+                                v-for="num in 9"
+                                :key="`header-link-group-${widget.id}-${num}`"
+                                :command="String(num)"
+                              >
+                                {{ num }}
+                              </el-dropdown-item>
+                            </el-dropdown-menu>
+                          </template>
+                        </el-dropdown>
+                        <el-button
+                          v-if="widget.type === 'watchlist_panel'"
+                          size="small"
+                          link
+                          @click.stop="openWatchlistPanelConfig(widget)"
+                        >
+                          设置
+                        </el-button>
                         <el-button
                           v-if="watchLayoutEditMode"
                           type="danger"
@@ -646,8 +757,86 @@
                     </div>
                     <div class="watch-widget-body">
                       <div v-if="widget.error" class="widget-error">{{ widget.error }}</div>
+                      <div v-else-if="widget.type === 'watchlist_panel'" class="widget-watchlist">
+                        <div class="widget-watchlist-tabs">
+                          <button
+                            v-for="group in (widget.watchlistGroups || [])"
+                            :key="`widget-watchlist-tab-${widget.id}-${group.id}`"
+                            type="button"
+                            class="widget-watchlist-tab"
+                            :class="{ active: group.id === widget.watchlistMeta?.group_id }"
+                            @click="switchWatchlistPanelGroup(widget, group.id)"
+                          >
+                            {{ group.name }}
+                          </button>
+                          <div class="widget-watchlist-tabs-actions">
+                            <button
+                              type="button"
+                              class="widget-watchlist-tab-icon"
+                              title="新建分组"
+                              @click="createWatchlistGroupForWidget(widget)"
+                            >
+                              +
+                            </button>
+                            <el-dropdown trigger="click" @command="(cmd) => setWatchlistPanelLinkGroup(widget, cmd)">
+                              <button
+                                type="button"
+                                class="widget-watchlist-tab-icon"
+                                title="设置联动分组"
+                              >
+                                {{ getWatchlistLinkGroupLabel(widget) }}
+                              </button>
+                              <template #dropdown>
+                                <el-dropdown-menu>
+                                  <el-dropdown-item command="">（无）</el-dropdown-item>
+                                  <el-dropdown-item
+                                    v-for="num in 9"
+                                    :key="`watch-link-group-${widget.id}-${num}`"
+                                    :command="String(num)"
+                                  >
+                                    {{ num }}
+                                  </el-dropdown-item>
+                                </el-dropdown-menu>
+                              </template>
+                            </el-dropdown>
+                          </div>
+                        </div>
+                        <div class="widget-watchlist-list">
+                          <div class="widget-watchlist-table-head" :style="getWatchlistGridStyle(widget.columns)">
+                            <span class="seq-head">
+                              <button
+                                type="button"
+                                class="watchlist-seq-setting-btn"
+                                title="设置"
+                                @click="openWatchlistPanelConfig(widget)"
+                              >
+                                设
+                              </button>
+                            </span>
+                            <span v-for="col in (widget.columns || [])" :key="`watchlist-head-${widget.id}-${col}`">{{ getWatchlistColumnLabel(col) }}</span>
+                          </div>
+                          <div
+                            v-for="(item, idx) in (widget.watchlistRows || [])"
+                            :key="`widget-watch-${widget.id}-${item.type}-${item.code}-${item.name}-${idx}`"
+                            class="widget-watchlist-item"
+                            :style="getWatchlistGridStyle(widget.columns)"
+                            @click="onWatchlistPanelRowClick(widget, item)"
+                          >
+                            <span class="seq-cell">{{ idx + 1 }}</span>
+                            <span
+                              v-for="col in (widget.columns || [])"
+                              :key="`watchlist-cell-${widget.id}-${idx}-${col}`"
+                              :class="getWatchlistCellClass(col, item)"
+                            >
+                              {{ formatWatchlistCell(item, col) }}
+                            </span>
+                          </div>
+                          <el-empty v-if="!(widget.watchlistRows || []).length" description="自选股为空" :image-size="58" />
+                        </div>
+                      </div>
                       <EChartsRenderer
                         v-else
+                        :key="getWidgetRenderKey(widget)"
                         :chart-html="widget.chartHtml"
                         :height="getWidgetChartHeight(widget)"
                       />
@@ -893,6 +1082,113 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="watchlistPanelConfigVisible" title="自选股组件设置" width="920px">
+      <div class="watchlist-config-layout">
+        <div class="watchlist-config-menu">
+          <button
+            v-for="menu in watchlistConfigMenuOptions"
+            :key="`watchlist-config-menu-${menu.value}`"
+            type="button"
+            class="watchlist-config-menu-item"
+            :class="{ active: watchlistConfigActiveMenu === menu.value }"
+            @click="watchlistConfigActiveMenu = menu.value"
+          >
+            {{ menu.label }}
+          </button>
+        </div>
+        <div class="watchlist-config-main">
+          <div v-if="watchlistConfigActiveMenu === 'add_stock'" class="watchlist-config-panel">
+            <div class="watchlist-config-panel-head">
+              <span>当前自选组：{{ watchlistPanelConfigGroupName }}</span>
+            </div>
+            <div class="watchlist-config-stock-search">
+              <el-input
+                v-model="watchlistConfigStockQuery"
+                size="small"
+                clearable
+                placeholder="输入股票代码或名称"
+                @keydown.enter.prevent="searchWatchlistConfigStocks"
+              />
+              <el-button size="small" :loading="watchlistConfigStockSearching" @click="searchWatchlistConfigStocks">查询</el-button>
+            </div>
+            <div class="watchlist-config-stock-list">
+              <div
+                v-for="row in watchlistConfigStockCandidates"
+                :key="`watchlist-config-stock-${row.code}`"
+                class="watchlist-config-stock-item"
+              >
+                <span class="stock-code">{{ row.code }}</span>
+                <span class="stock-name">{{ row.name }}</span>
+                <button
+                  v-if="!row.in_group"
+                  type="button"
+                  class="stock-mark add"
+                  @click="addStockFromWatchlistConfigRow(row)"
+                >
+                  +
+                </button>
+                <span v-else class="stock-mark exists">√</span>
+              </div>
+              <el-empty v-if="!watchlistConfigStockCandidates.length" description="暂无匹配股票" :image-size="52" />
+            </div>
+          </div>
+          <div v-else class="watchlist-config-panel">
+            <div class="watchlist-columns-layout">
+              <div class="watchlist-columns-schemes">
+                <div class="watchlist-columns-title">表头方案</div>
+                <button
+                  v-for="scheme in watchlistColumnSchemes"
+                  :key="`watchlist-scheme-${scheme.id}`"
+                  type="button"
+                  class="watchlist-scheme-item"
+                  :class="{ active: scheme.id === watchlistColumnSchemeId }"
+                  @click="applyWatchlistColumnScheme(scheme.id)"
+                >
+                  {{ scheme.name }}
+                </button>
+              </div>
+              <div class="watchlist-columns-selected">
+                <div class="watchlist-columns-title">已选表头</div>
+                <div class="watchlist-selected-list">
+                  <div
+                    v-for="col in watchlistPanelConfigForm.columns"
+                    :key="`watchlist-selected-${col}`"
+                    class="watchlist-selected-item"
+                  >
+                    <span>{{ getWatchlistColumnLabel(col) }}</span>
+                    <button type="button" @click="removeWatchlistColumn(col)">×</button>
+                  </div>
+                </div>
+                <div class="watchlist-header-search">
+                  <el-input
+                    v-model="watchlistHeaderSearch"
+                    size="small"
+                    clearable
+                    placeholder="搜索表头库（表头数据）"
+                  />
+                  <div class="watchlist-header-search-results">
+                    <button
+                      v-for="col in watchlistHeaderSearchResults"
+                      :key="`watchlist-header-result-${col.value}`"
+                      type="button"
+                      @click="addWatchlistColumn(col.value)"
+                    >
+                      + {{ col.label }}
+                    </button>
+                    <el-empty v-if="!watchlistHeaderSearchResults.length" description="无可添加表头" :image-size="44" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="watchlistPanelConfigVisible = false">关闭</el-button>
+        <el-button type="primary" @click="saveWatchlistPanelConfig">保存表头设置</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="memoryManageVisible" title="长期记忆管理" width="980px">
       <div class="memory-toolbar">
         <el-select v-model="memoryManageProfileId" style="width: 260px" placeholder="选择人格">
@@ -1100,6 +1396,15 @@ import ApiService from '../services/api'
 import EChartsRenderer from '../components/EChartsRenderer.vue'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import {
+  WATCHLIST_COLUMN_OPTIONS,
+  WATCHLIST_DEFAULT_COLUMNS,
+  buildWatchlistGridTemplate,
+  filterWatchlistColumns,
+  formatWatchlistCell as formatWatchlistCellUtil,
+  getWatchlistCellClass as getWatchlistCellClassUtil,
+  getWatchlistColumnLabel as getWatchlistColumnLabelUtil
+} from '@visualizers/watchlistPanel'
 
 use([
   CanvasRenderer,
@@ -1296,60 +1601,40 @@ const marketSentimentChartOptions = [
 ]
 const widgetToolCategories = [
   {
-    id: 'index',
-    label: '指数',
+    id: 'watchlist',
+    label: '自选组合',
     templates: [
       {
-        id: 'index_kline',
-        type: 'index_kline',
-        title: '指数K线',
-        desc: '查看指数趋势与成交量。',
+        id: 'watchlist_panel',
+        type: 'watchlist_panel',
+        title: '自选股列表',
+        desc: '展示自选分组与股票列表。',
         defaults: {
-          index_name: '上证指数',
-          days_range: 60
+          group_id: '',
+          max_count: 50
         },
         fields: [
-          { key: 'index_name', label: '指数名称', type: 'text', placeholder: '如：上证指数、创业板指' },
-          { key: 'days_range', label: '回看天数', type: 'number', min: 20, max: 500, step: 5 }
+          { key: 'max_count', label: '最大显示数', type: 'number', min: 1, max: 10000, step: 1 }
         ]
       }
     ]
   },
   {
-    id: 'sector',
-    label: '板块',
+    id: 'analysis',
+    label: '分析图',
     templates: [
       {
-        id: 'sector_kline',
-        type: 'sector_kline',
-        title: '板块K线',
-        desc: '查看行业/概念板块走势。',
+        id: 'analysis_kline',
+        type: 'analysis_kline',
+        title: '分析图',
+        desc: '自动识别股票/指数/板块并绘制K线。',
         defaults: {
-          sector_name: '半导体',
-          days_range: 60
-        },
-        fields: [
-          { key: 'sector_name', label: '板块名称', type: 'text', placeholder: '如：半导体、证券' },
-          { key: 'days_range', label: '回看天数', type: 'number', min: 20, max: 500, step: 5 }
-        ]
-      }
-    ]
-  },
-  {
-    id: 'stock',
-    label: '个股',
-    templates: [
-      {
-        id: 'stock_kline',
-        type: 'stock_kline',
-        title: '个股K线',
-        desc: '查看个股K线与均线。',
-        defaults: {
-          stock_code: '000001',
+          target_type: 'auto',
+          target_value: '000001',
           days: 120
         },
         fields: [
-          { key: 'stock_code', label: '股票代码', type: 'text', placeholder: '6位代码，如 600519' },
+          { key: 'target_value', label: '代码/名称', type: 'text', placeholder: '如 600519 / 上证指数 / 半导体' },
           { key: 'days', label: '回看天数', type: 'number', min: 20, max: 500, step: 5 }
         ]
       }
@@ -1398,7 +1683,42 @@ const widgetEditorVisible = ref(false)
 const widgetToolExpandedCategoryIds = ref([])
 const widgetPaletteDragging = ref(false)
 const widgetPaletteDragTemplateId = ref('')
+const watchlistGroups = ref([])
+const activeWatchlistGroupId = ref('')
+const watchlistStockSearchQuery = ref('')
+const watchlistSectorInput = ref('')
+const watchlistSelectedIndexName = ref('')
+const watchlistIndexOptions = ref(['上证指数', '深证成指', '创业板指', '科创50', '沪深300'])
+const watchlistPanelConfigVisible = ref(false)
+const watchlistPanelConfigWidgetId = ref('')
+const watchlistPanelConfigForm = ref({
+  group_id: '',
+  max_count: 50,
+  columns: [...WATCHLIST_DEFAULT_COLUMNS],
+  linked_widget_id: '',
+  stock_query: '',
+  sector_input: '',
+  index_name: ''
+})
+const watchlistConfigMenuOptions = [
+  { value: 'add_stock', label: '添加股票' },
+  { value: 'edit_columns', label: '编辑表头' }
+]
+const watchlistConfigActiveMenu = ref('add_stock')
+const watchlistConfigStockQuery = ref('')
+const watchlistConfigStockCandidates = ref([])
+const watchlistConfigStockSearching = ref(false)
+const watchlistHeaderSearch = ref('')
+const watchlistColumnSchemeId = ref('classic')
+const watchlistColumnSchemes = [
+  { id: 'classic', name: '经典方案', columns: ['code', 'name', 'change_pct', 'amount'] },
+  { id: 'trend', name: '趋势方案', columns: ['code', 'name', 'latest_price', 'change_pct', 'pct5', 'pct10'] },
+  { id: 'compact', name: '精简方案', columns: ['code', 'name', 'change_pct'] }
+]
 
+const KEY_WATCHLIST_MAX = 10000
+const KEY_WATCH_ROW_HEIGHT = 84
+const KEY_WATCH_OVERSCAN = 6
 const keyWatchlist = ref([])
 const keySelectedCode = ref('')
 const keyKlineData = ref([])
@@ -1410,6 +1730,47 @@ const keyPaneWidthPercent = ref(36)
 const keyLevelWindowDays = ref(3650)
 const keyBoardBodyRef = ref(null)
 const keyPaneResizing = ref(false)
+const keyWatchListRef = ref(null)
+const keyWatchScrollTop = ref(0)
+const keyWatchViewportHeight = ref(420)
+const keyBoardHydrating = ref(false)
+const keyWatchSortField = ref('change_pct')
+const keyWatchSortOrder = ref('desc')
+const keyWatchGroupBy = ref('custom')
+const keyWatchFilterGroup = ref('__all__')
+const keyChartMode = ref('kline')
+const keyAdjustMode = ref('none')
+const keySubIndicatorMode = ref('both')
+
+const keyChartModeOptions = [
+  { value: 'kline', label: 'K线' },
+  { value: 'time', label: '分时' }
+]
+const keyAdjustModeOptions = [
+  { value: 'none', label: '不复权' },
+  { value: 'qfq', label: '前复权' },
+  { value: 'hfq', label: '后复权' }
+]
+const keySubIndicatorModeOptions = [
+  { value: 'both', label: '量+额' },
+  { value: 'volume', label: '成交量' },
+  { value: 'amount', label: '成交额' }
+]
+const keyWatchGroupByOptions = [
+  { value: 'custom', label: '按分组' },
+  { value: 'market', label: '按市场' },
+  { value: 'change', label: '按涨跌' }
+]
+const keyWatchSortFieldOptions = [
+  { value: 'code', label: '代码' },
+  { value: 'name', label: '名称' },
+  { value: 'latest_price', label: '最新价' },
+  { value: 'change_pct', label: '涨跌幅' },
+  { value: 'amount', label: '成交额' },
+  { value: 'volume', label: '成交量' }
+]
+const watchlistColumnOptions = WATCHLIST_COLUMN_OPTIONS
+const watchLinkGroupOptions = Array.from({ length: 9 }, (_, idx) => String(idx + 1))
 const chatSidebarCollapsed = ref(false)
 const strategyListCollapsed = ref(false)
 
@@ -1495,6 +1856,36 @@ const activeConversationTitle = computed(() => {
 const activeStrategy = computed(() => {
   return strategies.value.find(item => item.id === activeStrategyId.value) || null
 })
+const watchlistPanelConfigWidget = computed(() => {
+  const wid = String(watchlistPanelConfigWidgetId.value || '').trim()
+  if (!wid) return null
+  return watchWidgetDefs.value.find(item => item.id === wid) || null
+})
+const watchlistPanelConfigGroup = computed(() => {
+  const gid = String(watchlistPanelConfigForm.value.group_id || '').trim()
+  if (!gid) return null
+  return watchlistGroups.value.find(item => item.id === gid) || null
+})
+const watchlistPanelConfigGroupName = computed(() => {
+  return String(watchlistPanelConfigGroup.value?.name || '默认自选组')
+})
+const watchlistHeaderSearchResults = computed(() => {
+  const keyword = String(watchlistHeaderSearch.value || '').trim().toLowerCase()
+  const selected = new Set(Array.isArray(watchlistPanelConfigForm.value.columns) ? watchlistPanelConfigForm.value.columns : [])
+  return watchlistColumnOptions.filter(col => {
+    if (selected.has(col.value)) return false
+    if (!keyword) return true
+    return String(col.label || '').toLowerCase().includes(keyword) || String(col.value || '').toLowerCase().includes(keyword)
+  })
+})
+const watchlistPanelLinkableWidgets = computed(() => {
+  return watchWidgetDefs.value
+    .filter(item => ['analysis_kline', 'stock_kline', 'sector_kline', 'index_kline'].includes(String(item?.type || '')))
+    .map(item => ({
+      id: item.id,
+      label: `${item.title || item.type} (${item.id})`
+    }))
+})
 const strategyTaggedCount = computed(() => {
   return (strategies.value || []).length
 })
@@ -1563,8 +1954,194 @@ const normalizeStockWidgetCode = (value) => {
   if (!digits) return '000001'
   return digits.padStart(6, '0')
 }
+const INDEX_CODE_NAME_MAP = Object.freeze({
+  '000001': '上证指数',
+  '000016': '上证50',
+  '000300': '沪深300',
+  '000688': '科创50',
+  '000852': '中证1000',
+  '000905': '中证500',
+  '399001': '深证成指',
+  '399006': '创业板指',
+  '800007': '微盘股',
+  '899050': '北证50',
+  '932000': '中证2000'
+})
+const INDEX_NAME_CODE_MAP = Object.freeze(
+  Object.fromEntries(
+    Object.entries(INDEX_CODE_NAME_MAP).map(([code, name]) => [name, code])
+  )
+)
+const normalizeIndexCodeLike = (value) => {
+  const text = String(value || '').trim().toUpperCase()
+  if (!text) return ''
+  if (/^(SH|SZ)\d{6}$/.test(text)) return text.slice(-6)
+  if (/^1B\d{4,6}$/.test(text)) return text.slice(2).padStart(6, '0').slice(-6)
+  if (/^\d{6}$/.test(text)) return text
+  return ''
+}
+const normalizeAnalysisTargetType = (value) => {
+  const kind = String(value || '').trim().toLowerCase()
+  return ['auto', 'stock', 'index', 'sector'].includes(kind) ? kind : 'auto'
+}
+const isLikelyIndexName = (name) => {
+  const text = String(name || '').trim()
+  if (!text) return false
+  if (watchlistIndexOptions.value.includes(text)) return true
+  return /指数|上证|深证|沪深|中证|创业板|科创|恒生|纳指|道琼斯|标普|NYSE|NASDAQ/i.test(text)
+}
+const detectAnalysisTargetType = (value, preferred = 'auto') => {
+  const targetValue = String(value || '').trim()
+  const explicit = normalizeAnalysisTargetType(preferred)
+  if (explicit !== 'auto') return explicit
+  if (/^BK\d{4}$/i.test(targetValue) || /^88\d{4}$/.test(targetValue)) return 'sector'
+  const indexCodeLike = normalizeIndexCodeLike(targetValue)
+  if (indexCodeLike && INDEX_CODE_NAME_MAP[indexCodeLike]) return 'index'
+  const digits = targetValue.replace(/\D/g, '')
+  if (digits.length === 6) return 'stock'
+  if (isLikelyIndexName(targetValue)) return 'index'
+  return 'sector'
+}
+const normalizeAnalysisKlineParams = (source = {}) => {
+  const days = clampNumber(Number(source.days || source.days_range || 120) || 120, 20, 500)
+  const targetType = normalizeAnalysisTargetType(source.target_type || source.type_hint || 'auto')
+  let targetValue = String(
+    source.target_value
+      || source.stock_code
+      || source.index_name
+      || source.sector_name
+      || source.code
+      || source.name
+      || '000001'
+  ).trim()
+  const resolvedType = detectAnalysisTargetType(targetValue, targetType)
+  if (resolvedType === 'stock') {
+    targetValue = normalizeStockWidgetCode(targetValue)
+  } else if (resolvedType === 'index') {
+    const byName = INDEX_NAME_CODE_MAP[targetValue]
+    if (byName) {
+      targetValue = byName
+    } else {
+      const byCodeLike = normalizeIndexCodeLike(targetValue)
+      if (byCodeLike) targetValue = byCodeLike
+    }
+  } else if (!targetValue) {
+    targetValue = resolvedType === 'index' ? '上证指数' : '半导体'
+  }
+  return {
+    target_type: targetType,
+    target_value: targetValue,
+    days,
+    link_group: watchLinkGroupOptions.includes(String(source.link_group || '').trim())
+      ? String(source.link_group || '').trim()
+      : ''
+  }
+}
+const getAnalysisTarget = (params = {}) => {
+  const normalized = normalizeAnalysisKlineParams(params)
+  const resolvedType = detectAnalysisTargetType(normalized.target_value, normalized.target_type)
+  const targetValue = resolvedType === 'stock'
+    ? normalizeStockWidgetCode(normalized.target_value)
+    : String(normalized.target_value || '').trim()
+  return {
+    type: resolvedType,
+    value: targetValue,
+    days: normalized.days
+  }
+}
 const clampNumber = (value, min, max) => Math.max(min, Math.min(max, value))
-const WATCH_WIDGET_GAP = 14
+const WATCHLIST_GROUP_ITEM_LIMIT = 10000
+const genWatchlistGroupId = () => `wg_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
+
+const normalizeWatchlistGroups = (rawGroups = []) => {
+  const groups = []
+  const source = Array.isArray(rawGroups) ? rawGroups : []
+  const used = new Set()
+  source.forEach((item, idx) => {
+    const raw = item && typeof item === 'object' ? item : {}
+    let id = String(raw.id || '').trim()
+    if (!id) id = `wg_auto_${idx + 1}`
+    while (used.has(id)) id = `${id}_${used.size + 1}`
+    used.add(id)
+    const name = String(raw.name || '').trim() || `自选组${idx + 1}`
+    const normalizedItems = []
+    const rawItems = Array.isArray(raw.items) ? raw.items : []
+    const itemUsed = new Set()
+    rawItems.forEach(entry => {
+      const one = entry && typeof entry === 'object' ? entry : {}
+      const type = ['stock', 'sector', 'index'].includes(one.type) ? one.type : 'stock'
+      const value = type === 'stock'
+        ? normalizeStockCode(one.code || one.value || '')
+        : String(one.name || one.code || one.value || '').trim()
+      if (!value) return
+      const dedupe = `${type}:${value}`
+      if (itemUsed.has(dedupe)) return
+      itemUsed.add(dedupe)
+      normalizedItems.push(type === 'stock'
+        ? { type, code: value, name: String(one.name || value).trim() || value }
+        : { type, name: value }
+      )
+    })
+    groups.push({
+      id,
+      name,
+      items: normalizedItems.slice(0, WATCHLIST_GROUP_ITEM_LIMIT)
+    })
+  })
+  if (!groups.length) {
+    groups.push({ id: genWatchlistGroupId(), name: '默认自选组', items: [] })
+  }
+  return groups
+}
+
+const getStrategyWatchlistGroupsConfig = (strategy) => {
+  const cfg = strategy?.config || {}
+  return Array.isArray(cfg.watchlist_groups) ? cfg.watchlist_groups : []
+}
+
+const activeWatchlistGroup = computed(() => {
+  return watchlistGroups.value.find(item => item.id === activeWatchlistGroupId.value) || watchlistGroups.value[0] || null
+})
+
+const ensureActiveWatchlistGroup = () => {
+  const currentId = String(activeWatchlistGroupId.value || '')
+  if (currentId && watchlistGroups.value.some(item => item.id === currentId)) return
+  activeWatchlistGroupId.value = watchlistGroups.value[0]?.id || ''
+}
+
+const hydrateWatchlistGroupsFromStrategy = (strategy) => {
+  const raw = getStrategyWatchlistGroupsConfig(strategy)
+  watchlistGroups.value = normalizeWatchlistGroups(raw)
+  ensureActiveWatchlistGroup()
+  const indexSet = new Set(watchlistIndexOptions.value)
+  watchlistGroups.value.forEach(group => {
+    group.items.forEach(item => {
+      if (item.type === 'index' && item.name) indexSet.add(item.name)
+    })
+  })
+  watchlistIndexOptions.value = Array.from(indexSet)
+}
+
+const serializeWatchlistGroups = () => {
+  return watchlistGroups.value.map(group => ({
+    id: group.id,
+    name: group.name,
+    items: (Array.isArray(group.items) ? group.items : []).map(item => {
+      if (item.type === 'stock') {
+        return {
+          type: 'stock',
+          code: normalizeStockCode(item.code),
+          name: String(item.name || normalizeStockCode(item.code)).trim() || normalizeStockCode(item.code)
+        }
+      }
+      return {
+        type: item.type === 'index' ? 'index' : 'sector',
+        name: String(item.name || '').trim()
+      }
+    }).filter(item => (item.type === 'stock' ? !!item.code : !!item.name))
+  }))
+}
+const WATCH_WIDGET_GAP = 0
 const WATCH_WIDGET_MIN_WIDTH = 300
 const WATCH_WIDGET_MIN_HEIGHT = 240
 const WATCH_WIDGET_MAX_WIDTH = 1500
@@ -1583,9 +2160,14 @@ const getSentimentChartTitle = (chartKey) => {
 }
 
 const buildWidgetTitle = (type, params = {}) => {
+  if (type === 'analysis_kline') {
+    const target = getAnalysisTarget(params)
+    return `${target.value || '分析标的'} K线`
+  }
   if (type === 'index_kline') return `${params.index_name || '上证指数'} K线`
   if (type === 'sector_kline') return `${params.sector_name || '板块'} K线`
   if (type === 'stock_kline') return `${params.stock_code || '000001'} K线`
+  if (type === 'watchlist_panel') return '自选股列表'
   if (type === 'market_volume') return '市场量能对比'
   if (type === 'market_sentiment_chart') return getSentimentChartTitle(params.chart_key)
   return '自定义图表'
@@ -1594,7 +2176,9 @@ const buildWidgetTitle = (type, params = {}) => {
 const genWidgetId = () => `widget_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`
 
 const getDefaultWidgetSize = (type) => {
+  if (type === 'analysis_kline') return { w: 620, h: 520 }
   if (type === 'index_kline' || type === 'sector_kline' || type === 'stock_kline') return { w: 620, h: 520 }
+  if (type === 'watchlist_panel') return { w: 460, h: 520 }
   if (type === 'market_volume') return { w: 620, h: 420 }
   return { w: 500, h: 420 }
 }
@@ -1613,22 +2197,46 @@ const getDefaultWidgetLayout = (index, type) => {
 
 const normalizeWidgetParams = (type, rawParams = {}) => {
   const source = rawParams && typeof rawParams === 'object' ? rawParams : {}
+  if (type === 'analysis_kline') {
+    return normalizeAnalysisKlineParams(source)
+  }
   if (type === 'index_kline') {
     return {
       index_name: String(source.index_name || source.index || '上证指数').trim() || '上证指数',
-      days_range: clampNumber(Number(source.days_range || source.days || 60) || 60, 20, 500)
+      days_range: clampNumber(Number(source.days_range || source.days || 60) || 60, 20, 500),
+      link_group: watchLinkGroupOptions.includes(String(source.link_group || '').trim())
+        ? String(source.link_group || '').trim()
+        : ''
     }
   }
   if (type === 'sector_kline') {
     return {
       sector_name: String(source.sector_name || source.sector || source.name || '半导体').trim() || '半导体',
-      days_range: clampNumber(Number(source.days_range || source.days || 60) || 60, 20, 500)
+      days_range: clampNumber(Number(source.days_range || source.days || 60) || 60, 20, 500),
+      link_group: watchLinkGroupOptions.includes(String(source.link_group || '').trim())
+        ? String(source.link_group || '').trim()
+        : ''
     }
   }
   if (type === 'stock_kline') {
     return {
       stock_code: normalizeStockWidgetCode(source.stock_code || source.code || '000001'),
-      days: clampNumber(Number(source.days || source.days_range || 120) || 120, 20, 500)
+      days: clampNumber(Number(source.days || source.days_range || 120) || 120, 20, 500),
+      link_group: watchLinkGroupOptions.includes(String(source.link_group || '').trim())
+        ? String(source.link_group || '').trim()
+        : ''
+    }
+  }
+  if (type === 'watchlist_panel') {
+    const validCols = filterWatchlistColumns(source.columns)
+    return {
+      group_id: String(source.group_id || '').trim(),
+      max_count: clampNumber(Number(source.max_count || 50) || 50, 1, 10000),
+      columns: validCols,
+      linked_widget_id: String(source.linked_widget_id || '').trim(),
+      link_group: watchLinkGroupOptions.includes(String(source.link_group || '').trim())
+        ? String(source.link_group || '').trim()
+        : ''
     }
   }
   if (type === 'market_sentiment_chart') {
@@ -1754,6 +2362,563 @@ const getWidgetToolTemplateById = (templateId) => {
   return null
 }
 
+const persistWatchlistGroups = async ({ silent = true } = {}) => {
+  if (!activeStrategy.value?.id || isKeyLevelStrategyConfig(activeStrategy.value)) return
+  await saveWatchWidgetConfig({ silent })
+}
+
+const setActiveWatchlistGroup = (groupId) => {
+  const id = String(groupId || '').trim()
+  if (!id) return
+  if (!watchlistGroups.value.some(item => item.id === id)) return
+  activeWatchlistGroupId.value = id
+}
+
+const createWatchlistGroup = async () => {
+  const nextIndex = (watchlistGroups.value?.length || 0) + 1
+  const defaultName = `自选组${nextIndex}`
+  try {
+    const { value } = await ElMessageBox.prompt('请输入组名', '新建自选组', {
+      inputValue: defaultName,
+      confirmButtonText: '创建',
+      cancelButtonText: '取消'
+    })
+    const name = String(value || '').trim() || defaultName
+    const group = { id: genWatchlistGroupId(), name, items: [] }
+    watchlistGroups.value = [...watchlistGroups.value, group]
+    activeWatchlistGroupId.value = group.id
+    await persistWatchlistGroups()
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
+const renameWatchlistGroup = async (group) => {
+  const gid = String(group?.id || '').trim()
+  if (!gid) return
+  const current = watchlistGroups.value.find(item => item.id === gid)
+  if (!current) return
+  try {
+    const { value } = await ElMessageBox.prompt('输入新的组名', '重命名自选组', {
+      inputValue: current.name || '',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const name = String(value || '').trim()
+    if (!name) return
+    watchlistGroups.value = watchlistGroups.value.map(item => (item.id === gid ? { ...item, name } : item))
+    await persistWatchlistGroups()
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
+const addWatchlistItemToGroup = async (groupId, item) => {
+  const gid = String(groupId || '').trim()
+  const group = watchlistGroups.value.find(one => one.id === gid) || null
+  if (!group) {
+    ElMessage.warning('请先新建自选组')
+    return
+  }
+  const raw = item && typeof item === 'object' ? item : {}
+  const type = ['stock', 'sector', 'index'].includes(raw.type) ? raw.type : 'stock'
+  const nextItem = type === 'stock'
+    ? { type: 'stock', code: normalizeStockCode(raw.code || raw.value || ''), name: String(raw.name || '').trim() }
+    : { type, name: String(raw.name || raw.value || '').trim() }
+  if (type === 'stock' && !nextItem.code) return
+  if (type !== 'stock' && !nextItem.name) return
+
+  const existing = Array.isArray(group.items) ? group.items : []
+  const exists = existing.some(one => (
+    one?.type === type && (
+      type === 'stock'
+        ? normalizeStockCode(one.code) === nextItem.code
+        : String(one.name || '').trim() === nextItem.name
+    )
+  ))
+  if (exists) {
+    ElMessage.warning('该标的已在当前组')
+    return
+  }
+  if (existing.length >= WATCHLIST_GROUP_ITEM_LIMIT) {
+    ElMessage.warning(`单组上限 ${WATCHLIST_GROUP_ITEM_LIMIT} 条`)
+    return
+  }
+  const safeItem = type === 'stock'
+    ? { type, code: nextItem.code, name: nextItem.name || nextItem.code }
+    : { type, name: nextItem.name }
+  watchlistGroups.value = watchlistGroups.value.map(one => (
+    one.id === gid
+      ? { ...one, items: [...existing, safeItem] }
+      : one
+  ))
+  await persistWatchlistGroups()
+}
+
+const addWatchlistItemToActiveGroup = async (item) => {
+  await addWatchlistItemToGroup(activeWatchlistGroup.value?.id || '', item)
+}
+
+const queryWatchlistStockSuggestions = async (queryString, cb) => {
+  const term = (queryString || '').trim()
+  if (!term) {
+    cb([])
+    return
+  }
+  try {
+    const res = await ApiService.searchStocks(term)
+    const rows = Array.isArray(res?.data) ? res.data : []
+    cb(rows.slice(0, 20).map(item => ({
+      value: `${item.代码} ${item.名称}`,
+      type: 'stock',
+      code: normalizeStockCode(item.代码),
+      name: String(item.名称 || '').trim() || normalizeStockCode(item.代码)
+    })))
+  } catch (error) {
+    console.error(error)
+    cb([])
+  }
+}
+
+const onWatchlistStockSuggestionSelect = async (item) => {
+  watchlistStockSearchQuery.value = ''
+  await addWatchlistItemToActiveGroup({
+    type: 'stock',
+    code: item?.code,
+    name: item?.name
+  })
+}
+
+const addSectorToActiveWatchlistGroup = async () => {
+  const name = String(watchlistSectorInput.value || '').trim()
+  if (!name) {
+    ElMessage.warning('请输入板块名称')
+    return
+  }
+  watchlistSectorInput.value = ''
+  await addWatchlistItemToActiveGroup({ type: 'sector', name })
+}
+
+const addIndexToActiveWatchlistGroup = async () => {
+  const name = String(watchlistSelectedIndexName.value || '').trim()
+  if (!name) {
+    ElMessage.warning('请选择指数')
+    return
+  }
+  if (!watchlistIndexOptions.value.includes(name)) {
+    watchlistIndexOptions.value = [...watchlistIndexOptions.value, name]
+  }
+  await addWatchlistItemToActiveGroup({ type: 'index', name })
+}
+
+const loadWatchlistIndexOptions = async () => {
+  try {
+    const res = await ApiService.getIndicesAvailable()
+    const rows = Array.isArray(res?.data) ? res.data : []
+    const names = rows
+      .map(item => String(item?.name || item?.index_name || item || '').trim())
+      .filter(Boolean)
+    if (!names.length) return
+    const merged = new Set(watchlistIndexOptions.value)
+    names.forEach(name => merged.add(name))
+    watchlistIndexOptions.value = Array.from(merged)
+  } catch (error) {
+    console.error(error)
+  }
+}
+
+const getWatchlistColumnLabel = (col) => {
+  return getWatchlistColumnLabelUtil(col)
+}
+
+const getWatchlistLinkGroupLabel = (widget) => {
+  const group = String(widget?.params?.link_group || '').trim()
+  return watchLinkGroupOptions.includes(group) ? group : '组'
+}
+
+const getWatchlistGridStyle = (columns) => {
+  return {
+    gridTemplateColumns: `48px ${buildWatchlistGridTemplate(columns)}`
+  }
+}
+
+const getWatchlistCellClass = (col, item) => {
+  return getWatchlistCellClassUtil(col, item, watchChangeClass)
+}
+
+const formatWatchlistCell = (item, col) => {
+  return formatWatchlistCellUtil(item, col, {
+    formatPrice: formatWatchPrice,
+    formatChange: formatWatchChange,
+    formatAmount: formatWatchAmount
+  })
+}
+
+const openWatchlistPanelConfig = (widget) => {
+  const source = widget && typeof widget === 'object' ? widget : {}
+  const params = normalizeWidgetParams('watchlist_panel', source.params || {})
+  const fallbackGroupId = watchlistGroups.value[0]?.id || ''
+  watchlistPanelConfigWidgetId.value = String(source.id || '').trim()
+  watchlistPanelConfigForm.value = {
+    group_id: params.group_id || fallbackGroupId,
+    max_count: params.max_count || 50,
+    columns: filterWatchlistColumns(params.columns),
+    linked_widget_id: String(params.linked_widget_id || '').trim(),
+    stock_query: '',
+    sector_input: '',
+    index_name: watchlistIndexOptions.value[0] || ''
+  }
+  watchlistConfigActiveMenu.value = 'add_stock'
+  watchlistConfigStockQuery.value = ''
+  watchlistConfigStockCandidates.value = []
+  watchlistHeaderSearch.value = ''
+  watchlistColumnSchemeId.value = 'classic'
+  watchlistPanelConfigVisible.value = true
+}
+
+const patchWatchlistWidgetParamsById = async (widgetId, patch = {}) => {
+  const target = String(widgetId || '').trim()
+  if (!target) return false
+  const idx = watchWidgetDefs.value.findIndex(item => item.id === target)
+  if (idx < 0) return false
+  const next = [...watchWidgetDefs.value]
+  const current = next[idx]
+  next[idx] = {
+    ...current,
+    params: normalizeWidgetParams('watchlist_panel', {
+      ...(current.params || {}),
+      ...(patch || {})
+    })
+  }
+  watchWidgetDefs.value = next
+  const saved = await saveWatchWidgetConfig({ silent: true })
+  if (!saved) return false
+  const rendered = await renderWatchWidget(next[idx])
+  watchWidgets.value = patchWidgetById(watchWidgets.value, target, () => rendered)
+  return true
+}
+
+const saveWatchlistPanelConfig = async () => {
+  const widget = watchlistPanelConfigWidget.value
+  if (!widget?.id) return
+  const columns = filterWatchlistColumns(watchlistPanelConfigForm.value.columns)
+  const nextGroupId = String(watchlistPanelConfigForm.value.group_id || '').trim() || watchlistGroups.value[0]?.id || ''
+  await patchWatchlistWidgetParamsById(widget.id, {
+    group_id: nextGroupId,
+    max_count: clampNumber(Number(watchlistPanelConfigForm.value.max_count || 50) || 50, 1, 10000),
+    columns,
+    linked_widget_id: String(watchlistPanelConfigForm.value.linked_widget_id || '').trim()
+  })
+}
+
+const searchWatchlistConfigStocks = async () => {
+  const keyword = String(watchlistConfigStockQuery.value || '').trim()
+  if (!keyword) {
+    watchlistConfigStockCandidates.value = []
+    return
+  }
+  watchlistConfigStockSearching.value = true
+  try {
+    const res = await ApiService.searchStocks(keyword)
+    const rows = Array.isArray(res?.data) ? res.data : []
+    const gid = String(watchlistPanelConfigForm.value.group_id || '').trim()
+    const group = watchlistGroups.value.find(one => one.id === gid) || null
+    const existsSet = new Set(
+      (Array.isArray(group?.items) ? group.items : [])
+        .filter(one => one?.type === 'stock')
+        .map(one => normalizeStockCode(one?.code || ''))
+    )
+    watchlistConfigStockCandidates.value = rows.slice(0, 50).map(item => {
+      const code = normalizeStockCode(item?.代码 || item?.code || '')
+      return {
+        code,
+        name: String(item?.名称 || item?.name || '').trim() || code,
+        in_group: existsSet.has(code)
+      }
+    }).filter(one => !!one.code)
+  } catch (error) {
+    console.error(error)
+    watchlistConfigStockCandidates.value = []
+  } finally {
+    watchlistConfigStockSearching.value = false
+  }
+}
+
+const addStockFromWatchlistConfigRow = async (row) => {
+  const code = normalizeStockCode(row?.code || '')
+  const name = String(row?.name || '').trim() || code
+  const gid = String(watchlistPanelConfigForm.value.group_id || '').trim()
+  if (!gid || !code) return
+  await addWatchlistItemToGroup(gid, { type: 'stock', code, name })
+  watchlistConfigStockCandidates.value = watchlistConfigStockCandidates.value.map(item => (
+    item.code === code ? { ...item, in_group: true } : item
+  ))
+  const widget = watchlistPanelConfigWidget.value
+  if (widget?.id) {
+    const rendered = await renderWatchWidget(widget)
+    watchWidgets.value = patchWidgetById(watchWidgets.value, widget.id, () => rendered)
+  }
+}
+
+const applyWatchlistColumnScheme = (schemeId) => {
+  const target = watchlistColumnSchemes.find(one => one.id === schemeId)
+  if (!target) return
+  watchlistColumnSchemeId.value = target.id
+  watchlistPanelConfigForm.value.columns = filterWatchlistColumns(target.columns)
+}
+
+const addWatchlistColumn = (col) => {
+  const value = String(col || '').trim()
+  if (!value) return
+  const current = Array.isArray(watchlistPanelConfigForm.value.columns) ? watchlistPanelConfigForm.value.columns : []
+  if (current.includes(value)) return
+  watchlistPanelConfigForm.value.columns = filterWatchlistColumns([...current, value])
+}
+
+const removeWatchlistColumn = (col) => {
+  const value = String(col || '').trim()
+  if (!value) return
+  const current = Array.isArray(watchlistPanelConfigForm.value.columns) ? watchlistPanelConfigForm.value.columns : []
+  watchlistPanelConfigForm.value.columns = filterWatchlistColumns(current.filter(item => item !== value))
+}
+
+const switchWatchlistPanelGroup = async (widget, groupId) => {
+  const wid = String(widget?.id || '').trim()
+  const gid = String(groupId || '').trim()
+  if (!wid || !gid) return
+  await patchWatchlistWidgetParamsById(wid, { group_id: gid })
+}
+
+const createWatchlistGroupForWidget = async (widget) => {
+  await createWatchlistGroup()
+  const wid = String(widget?.id || '').trim()
+  const gid = String(activeWatchlistGroupId.value || '').trim()
+  if (!wid || !gid) return
+  await patchWatchlistWidgetParamsById(wid, { group_id: gid })
+}
+
+const setWatchlistPanelLinkGroup = async (widget, groupId) => {
+  const wid = String(widget?.id || '').trim()
+  if (!wid) return
+  const linkGroup = String(groupId || '').trim()
+  await patchWatchlistWidgetParamsById(wid, {
+    link_group: watchLinkGroupOptions.includes(linkGroup) ? linkGroup : ''
+  })
+}
+
+const setWidgetLinkGroup = async (widget, groupId) => {
+  const wid = String(widget?.id || '').trim()
+  const wtype = String(widget?.type || '').trim()
+  if (!wid || !wtype) return
+  const linkGroup = watchLinkGroupOptions.includes(String(groupId || '').trim()) ? String(groupId || '').trim() : ''
+  if (wtype === 'watchlist_panel') {
+    await setWatchlistPanelLinkGroup(widget, linkGroup)
+    return
+  }
+  if (!isAnalysisWidgetType(wtype)) return
+  const patched = watchWidgetDefs.value.map(one => (
+    one.id === wid
+      ? { ...one, params: normalizeWidgetParams(wtype, { ...(one.params || {}), link_group: linkGroup }) }
+      : one
+  ))
+  watchWidgetDefs.value = patched
+  const saved = await saveWatchWidgetConfig({ silent: true })
+  if (!saved) return
+  const latest = patched.find(one => one.id === wid)
+  if (!latest) return
+  const rendered = await renderWatchWidget(latest)
+  watchWidgets.value = patchWidgetById(watchWidgets.value, wid, () => rendered)
+}
+
+const isAnalysisWidgetType = (type) => ['analysis_kline', 'stock_kline', 'sector_kline', 'index_kline'].includes(String(type || ''))
+const canWidgetAcceptWatchlistSource = (widget, source) => {
+  const wtype = String(widget?.type || '').trim()
+  const stype = String(source?.type || '').trim()
+  if (!wtype || !stype) return false
+  if (wtype === 'analysis_kline') return ['stock', 'sector', 'index'].includes(stype)
+  if (wtype === 'stock_kline') return stype === 'stock'
+  if (wtype === 'sector_kline') return stype === 'sector'
+  if (wtype === 'index_kline') return stype === 'index'
+  return false
+}
+
+const findLinkedAnalysisWidgets = (widget) => {
+  const candidates = watchWidgetDefs.value.filter(item => isAnalysisWidgetType(item.type))
+  const wid = String(widget?.id || '').trim()
+  const widgetDef = wid ? watchWidgetDefs.value.find(item => item.id === wid) : null
+  const params = widgetDef?.params || widget?.params || {}
+  const linkGroup = String(params.link_group || '').trim()
+  // 严格按联动分组联动；不再使用 linked_widget_id，也不跨组兜底。
+  if (watchLinkGroupOptions.includes(linkGroup)) {
+    const byGroup = candidates.filter(item => String(item?.params?.link_group || '').trim() === linkGroup)
+    return byGroup
+  }
+  if (candidates.length === 1) return [candidates[0]]
+  return []
+}
+
+const onWatchlistPanelRowClick = async (widget, item) => {
+  const source = item && typeof item === 'object' ? item : {}
+  const widgetId = String(widget?.id || '').trim()
+  const widgetDef = widgetId ? watchWidgetDefs.value.find(one => one.id === widgetId) : null
+  const linkGroup = String(widgetDef?.params?.link_group || widget?.params?.link_group || '').trim()
+  let targets = findLinkedAnalysisWidgets(widget)
+  targets = targets.filter(target => canWidgetAcceptWatchlistSource(target, source))
+  const hasExplicitLinkGroup = watchLinkGroupOptions.includes(linkGroup)
+  if (!targets.length && !hasExplicitLinkGroup && source.type === 'stock' && source.code) {
+    const fallback = watchWidgetDefs.value.find(item => item.type === 'analysis_kline')
+      || watchWidgetDefs.value.find(item => item.type === 'stock_kline')
+    if (fallback) targets = [fallback]
+  }
+  if (!targets.length && !hasExplicitLinkGroup) {
+    const generic = watchWidgetDefs.value.find(item => item.type === 'analysis_kline')
+    if (generic && canWidgetAcceptWatchlistSource(generic, source)) {
+      targets = [generic]
+    }
+  }
+  if (!targets.length) {
+    console.log('[watchlist-link] row-click no-target', {
+      source: {
+        type: String(source.type || ''),
+        code: String(source.code || ''),
+        name: String(source.name || '')
+      },
+      watchlist_widget_id: widgetId,
+      link_group: linkGroup
+    })
+    try {
+      await ApiService.postStrategyWatchLinkDebug({
+        status: 'no_target',
+        watchlist_widget_id: widgetId,
+        link_group: linkGroup,
+        source: {
+          type: String(source.type || ''),
+          code: String(source.code || ''),
+          name: String(source.name || '')
+        },
+        matched_targets: []
+      })
+    } catch (error) {
+      console.error(error)
+    }
+    return
+  }
+
+  const patchLogs = []
+  const patched = watchWidgetDefs.value.map((one) => {
+    const target = targets.find(item => item.id === one.id)
+    if (!target) return one
+    const patch = {}
+    if (target.type === 'analysis_kline') {
+      if (source.type === 'stock' && source.code) {
+        patch.target_type = 'stock'
+        patch.target_value = normalizeStockWidgetCode(source.code)
+      } else if (source.type === 'sector' && source.name) {
+        patch.target_type = 'sector'
+        patch.target_value = String(source.name || '').trim()
+      } else if (source.type === 'index' && source.name) {
+        patch.target_type = 'index'
+        patch.target_value = String(source.name || '').trim()
+      } else {
+        return one
+      }
+    } else if (target.type === 'stock_kline' && source.type === 'stock' && source.code) {
+      patch.stock_code = normalizeStockWidgetCode(source.code)
+    } else if (target.type === 'sector_kline' && source.type === 'sector' && source.name) {
+      patch.sector_name = String(source.name || '').trim()
+    } else if (target.type === 'index_kline' && source.type === 'index' && source.name) {
+      patch.index_name = String(source.name || '').trim()
+    } else {
+      return one
+    }
+    patchLogs.push({
+      target_id: target.id,
+      target_type: target.type,
+      patch: { ...patch }
+    })
+    return { ...one, params: normalizeWidgetParams(target.type, { ...(one.params || {}), ...patch }) }
+  })
+  if (patchLogs.length) {
+    console.log('[watchlist-link] row-click', {
+      source: {
+        type: String(source.type || ''),
+        code: String(source.code || ''),
+        name: String(source.name || '')
+      },
+      watchlist_widget_id: widgetId,
+      link_group: linkGroup,
+      matched_targets: patchLogs
+    })
+  } else {
+    console.log('[watchlist-link] row-click no-patch', {
+      source: {
+        type: String(source.type || ''),
+        code: String(source.code || ''),
+        name: String(source.name || '')
+      },
+      watchlist_widget_id: widgetId,
+      link_group: linkGroup
+    })
+  }
+  try {
+    await ApiService.postStrategyWatchLinkDebug({
+      status: patchLogs.length ? 'patched' : 'no_patch',
+      watchlist_widget_id: widgetId,
+      link_group: linkGroup,
+      source: {
+        type: String(source.type || ''),
+        code: String(source.code || ''),
+        name: String(source.name || '')
+      },
+      matched_targets: patchLogs
+    })
+  } catch (error) {
+    console.error(error)
+  }
+  watchWidgetDefs.value = patched
+  const saved = await saveWatchWidgetConfig({ silent: true })
+  if (!saved) {
+    console.warn('[watchlist-link] saveWatchWidgetConfig failed, render locally only')
+  }
+  for (const target of targets) {
+    const latest = patched.find(one => one.id === target.id)
+    if (!latest) continue
+    const rendered = await renderWatchWidget(latest)
+    const chartHtml = String(rendered?.chartHtml || '')
+    console.log('[watchlist-link] render-target', {
+      target_id: String(target.id || ''),
+      target_type: String(target.type || ''),
+      params: latest.params || {},
+      html_length: chartHtml.length,
+      html_preview: chartHtml.slice(0, 120)
+    })
+    try {
+      await ApiService.postStrategyWatchLinkDebug({
+        status: 'rendered',
+        watchlist_widget_id: widgetId,
+        link_group: linkGroup,
+        source: {
+          type: String(source.type || ''),
+          code: String(source.code || ''),
+          name: String(source.name || '')
+        },
+        matched_targets: [{
+          target_id: String(target.id || ''),
+          target_type: String(target.type || ''),
+          patch: latest.params || {},
+          render_result: {
+            html_length: chartHtml.length,
+            error: String(rendered?.error || '')
+          }
+        }]
+      })
+    } catch (error) {
+      console.error(error)
+    }
+    watchWidgets.value = patchWidgetById(watchWidgets.value, target.id, () => rendered)
+  }
+}
+
 const getDroppedWidgetLayout = (type, event) => {
   const size = getDefaultWidgetSize(type)
   const boardEl = watchBoardRef.value
@@ -1786,10 +2951,8 @@ const openWidgetEditor = () => {
     return
   }
   watchLayoutEditMode.value = true
-  if (!widgetToolExpandedCategoryIds.value.length) {
-    const firstCategoryId = widgetToolCategories[0]?.id || ''
-    widgetToolExpandedCategoryIds.value = firstCategoryId ? [firstCategoryId] : []
-  }
+  const validIds = widgetToolCategories.map(item => String(item?.id || '').trim()).filter(Boolean)
+  widgetToolExpandedCategoryIds.value = validIds
 }
 
 const onWidgetToolTemplateDragStart = (template, event) => {
@@ -1838,6 +3001,17 @@ const onWatchBoardDrop = async (event) => {
 const getWidgetChartHeight = (widget) => {
   const raw = Number(widget?.layout?.h || 360) - 58
   return `${Math.max(180, Math.floor(raw))}px`
+}
+
+const getWidgetRenderKey = (widget) => {
+  const wid = String(widget?.id || '')
+  const wtype = String(widget?.type || '')
+  const params = widget?.params && typeof widget.params === 'object'
+    ? JSON.stringify(widget.params)
+    : ''
+  const htmlLen = Number(String(widget?.chartHtml || '').length || 0)
+  const err = String(widget?.error || '')
+  return `${wid}|${wtype}|${params}|${htmlLen}|${err}`
 }
 
 const watchWidgetStyle = (widget) => {
@@ -2261,15 +3435,202 @@ const keySelectedStock = computed(() => {
   return keyWatchlist.value.find(item => item.code === code) || null
 })
 
+const keyChartModeLabel = computed(() => {
+  const found = keyChartModeOptions.find(item => item.value === keyChartMode.value)
+  return found?.label || 'K线'
+})
+
+const keyAdjustModeLabel = computed(() => {
+  const found = keyAdjustModeOptions.find(item => item.value === keyAdjustMode.value)
+  return found?.label || '不复权'
+})
+
+const keySubIndicatorModeLabel = computed(() => {
+  const found = keySubIndicatorModeOptions.find(item => item.value === keySubIndicatorMode.value)
+  return found?.label || '量+额'
+})
+
+const keyWatchGroupByLabel = computed(() => {
+  const found = keyWatchGroupByOptions.find(item => item.value === keyWatchGroupBy.value)
+  return found?.label || '按分组'
+})
+
+const resolveMarketGroupByCode = (code) => {
+  const normalized = normalizeStockCode(code)
+  if (normalized.startsWith('60') || normalized.startsWith('68')) return '沪市'
+  if (normalized.startsWith('00') || normalized.startsWith('30')) return '深市'
+  if (normalized.startsWith('43') || normalized.startsWith('83') || normalized.startsWith('87')) return '北交'
+  return '其他'
+}
+
+const resolveWatchGroupLabel = (item, groupBy = keyWatchGroupBy.value) => {
+  const source = item && typeof item === 'object' ? item : {}
+  if (groupBy === 'market') return resolveMarketGroupByCode(source.code)
+  if (groupBy === 'change') {
+    const pct = Number(source.change_pct || 0)
+    if (pct > 0) return '上涨'
+    if (pct < 0) return '下跌'
+    return '平盘'
+  }
+  return String(source.group || '').trim() || '默认分组'
+}
+
+const compareWatchSortValue = (a, b, field, order = 'desc') => {
+  const f = String(field || 'change_pct')
+  let result = 0
+  if (f === 'name') {
+    result = String(a.name || '').localeCompare(String(b.name || ''), 'zh-Hans-CN')
+  } else if (f === 'code') {
+    result = String(a.code || '').localeCompare(String(b.code || ''), 'zh-Hans-CN')
+  } else {
+    result = Number(a[f] || 0) - Number(b[f] || 0)
+  }
+  return order === 'asc' ? result : -result
+}
+
+const keySortedWatchlist = computed(() => {
+  const list = Array.isArray(keyWatchlist.value) ? [...keyWatchlist.value] : []
+  list.sort((a, b) => compareWatchSortValue(a, b, keyWatchSortField.value, keyWatchSortOrder.value))
+  return list
+})
+
+const sortWatchGroupKeys = (keys = [], groupBy = keyWatchGroupBy.value) => {
+  if (groupBy === 'market') {
+    const rank = { 沪市: 1, 深市: 2, 北交: 3, 其他: 4 }
+    return [...keys].sort((a, b) => (rank[a] || 99) - (rank[b] || 99))
+  }
+  if (groupBy === 'change') {
+    const rank = { 上涨: 1, 平盘: 2, 下跌: 3 }
+    return [...keys].sort((a, b) => (rank[a] || 99) - (rank[b] || 99))
+  }
+  return [...keys].sort((a, b) => String(a).localeCompare(String(b), 'zh-Hans-CN'))
+}
+
+const keyGroupedWatchRows = computed(() => {
+  const groupBy = keyWatchGroupBy.value
+  const grouped = new Map()
+  keySortedWatchlist.value.forEach(item => {
+    const label = resolveWatchGroupLabel(item, groupBy)
+    const arr = grouped.get(label) || []
+    arr.push(item)
+    grouped.set(label, arr)
+  })
+  return sortWatchGroupKeys(Array.from(grouped.keys()), groupBy).map(label => ({
+    label,
+    items: grouped.get(label) || []
+  }))
+})
+
+const keyWatchGroupFilterOptions = computed(() => {
+  const options = [{ value: '__all__', label: '全部分组' }]
+  keyGroupedWatchRows.value.forEach(group => {
+    options.push({
+      value: group.label,
+      label: `${group.label} (${group.items.length})`
+    })
+  })
+  return options
+})
+
+const keyWatchFlatRows = computed(() => {
+  const selectedGroup = String(keyWatchFilterGroup.value || '__all__')
+  const rows = []
+  keyGroupedWatchRows.value.forEach(group => {
+    if (selectedGroup !== '__all__' && selectedGroup !== group.label) return
+    rows.push({
+      id: `group::${group.label}`,
+      type: 'group',
+      label: group.label,
+      count: group.items.length
+    })
+    group.items.forEach(item => {
+      rows.push({
+        id: `stock::${item.code}`,
+        type: 'stock',
+        item
+      })
+    })
+  })
+  return rows
+})
+
+const keyWatchVirtualMeta = computed(() => {
+  const rows = keyWatchFlatRows.value
+  const viewport = Math.max(1, Number(keyWatchViewportHeight.value || 0))
+  const visibleCount = Math.ceil(viewport / KEY_WATCH_ROW_HEIGHT) + KEY_WATCH_OVERSCAN * 2
+  const start = Math.max(0, Math.floor(keyWatchScrollTop.value / KEY_WATCH_ROW_HEIGHT) - KEY_WATCH_OVERSCAN)
+  const end = Math.min(rows.length, start + visibleCount)
+  return {
+    rows: rows.slice(start, end),
+    paddingTop: start * KEY_WATCH_ROW_HEIGHT,
+    paddingBottom: Math.max(0, (rows.length - end) * KEY_WATCH_ROW_HEIGHT)
+  }
+})
+
+const keyWatchVisibleRows = computed(() => keyWatchVirtualMeta.value.rows)
+const keyWatchVirtualPaddingTop = computed(() => keyWatchVirtualMeta.value.paddingTop)
+const keyWatchVirtualPaddingBottom = computed(() => keyWatchVirtualMeta.value.paddingBottom)
+
+const onKeyWatchListScroll = (event) => {
+  keyWatchScrollTop.value = Number(event?.target?.scrollTop || 0)
+}
+
+const updateKeyWatchViewport = () => {
+  const height = Number(keyWatchListRef.value?.clientHeight || 0)
+  if (height > 0) keyWatchViewportHeight.value = height
+}
+
+const handleKeyWatchWindowResize = () => {
+  updateKeyWatchViewport()
+}
+
+const resetKeyWatchListScroll = () => {
+  keyWatchScrollTop.value = 0
+  if (keyWatchListRef.value) {
+    keyWatchListRef.value.scrollTop = 0
+  }
+}
+
+const toggleKeyWatchSortOrder = () => {
+  keyWatchSortOrder.value = keyWatchSortOrder.value === 'desc' ? 'asc' : 'desc'
+}
+
+const resolveDevicePixelRatio = () => {
+  if (typeof window === 'undefined') return 1
+  const dpr = Number(window.devicePixelRatio || 1)
+  if (!Number.isFinite(dpr) || dpr <= 0) return 1
+  return dpr
+}
+
+const alignToDevicePixel = (value) => {
+  const dpr = resolveDevicePixelRatio()
+  return Math.round(Number(value || 0) * dpr) / dpr
+}
+
+const keyChartInitOptions = computed(() => ({
+  renderer: 'canvas',
+  devicePixelRatio: resolveDevicePixelRatio(),
+  useDirtyRect: true
+}))
+
 const keyKlineOption = computed(() => {
   if (!keyKlineData.value.length) return {}
-  const dates = keyKlineData.value.map(item => item.date)
-  const candlestickData = keyKlineData.value.map(item => [item.open, item.close, item.low, item.high])
-  const ma5Data = keyKlineData.value.map(item => item.ma5)
-  const ma10Data = keyKlineData.value.map(item => item.ma10)
-  const ma20Data = keyKlineData.value.map(item => item.ma20)
-  const volumeData = keyKlineData.value.map(item => ({
-    value: item.amount || item.volume || 0,
+
+  const rows = keyKlineData.value
+  const dates = rows.map(item => item.date)
+  const candlestickData = rows.map(item => [item.open, item.close, item.low, item.high])
+  const closeData = rows.map(item => item.close)
+  const ma5Data = rows.map(item => item.ma5)
+  const ma10Data = rows.map(item => item.ma10)
+  const ma20Data = rows.map(item => item.ma20)
+  const volumeData = rows.map(item => ({
+    value: item.volume || 0,
+    itemStyle: {
+      color: Number(item.close) >= Number(item.open) ? '#ef232a' : '#14b143'
+    }
+  }))
+  const amountData = rows.map(item => ({
+    value: item.amount || 0,
     itemStyle: {
       color: Number(item.close) >= Number(item.open) ? '#ef232a' : '#14b143'
     }
@@ -2293,73 +3654,79 @@ const keyKlineOption = computed(() => {
       }
     : undefined
 
-  return {
-    animation: false,
-    color: ['#4ECDC4', '#ffbf00', '#f92672'],
-    tooltip: {
-      trigger: 'axis',
-      axisPointer: { type: 'cross' }
-    },
-    legend: {
-      data: ['MA5', 'MA10', 'MA20'],
-      top: 24,
-      right: 10
-    },
-    grid: [
-      { left: '8%', right: '6%', height: '56%' },
-      { left: '8%', right: '6%', top: '74%', height: '16%' }
-    ],
-    xAxis: [
-      {
-        type: 'category',
-        data: dates,
-        boundaryGap: false,
-        scale: true,
-        min: 'dataMin',
-        max: 'dataMax',
-        splitLine: { show: false }
+  const subPanels = []
+  if (keySubIndicatorMode.value === 'volume' || keySubIndicatorMode.value === 'both') {
+    subPanels.push({ key: 'volume', name: '成交量', data: volumeData, color: '#5ca6ff' })
+  }
+  if (keySubIndicatorMode.value === 'amount' || keySubIndicatorMode.value === 'both') {
+    subPanels.push({ key: 'amount', name: '成交额', data: amountData, color: '#8a7dff' })
+  }
+
+  const grid = []
+  const xAxis = []
+  const yAxis = []
+  const series = []
+  const axisLineWidth = alignToDevicePixel(1)
+  const pct = (value) => `${Math.max(0, Number(Number(value).toFixed(4)))}%`
+
+  // 主图和副图使用连续网格，避免中间露出背景缝隙。
+  const mainTopPct = 8
+  const bottomReservedPct = 10
+  const usablePct = 100 - mainTopPct - bottomReservedPct
+  const mainRatio = subPanels.length >= 2 ? 0.68 : 0.76
+  const mainHeightPct = subPanels.length ? usablePct * mainRatio : usablePct
+  const subHeightPct = subPanels.length ? (usablePct - mainHeightPct) / subPanels.length : 0
+  let cursorPct = mainTopPct
+
+  grid.push({
+    left: alignToDevicePixel(56),
+    right: alignToDevicePixel(36),
+    top: pct(cursorPct),
+    height: pct(mainHeightPct),
+    containLabel: false
+  })
+  xAxis.push({
+    type: 'category',
+    data: dates,
+    boundaryGap: false,
+    scale: true,
+    min: 'dataMin',
+    max: 'dataMax',
+    axisLine: { lineStyle: { width: axisLineWidth, color: '#d7e0ea' } },
+    axisLabel: { show: subPanels.length === 0 },
+    axisTick: { show: subPanels.length === 0 },
+    splitLine: { show: false }
+  })
+  yAxis.push({
+    scale: true,
+    axisLine: { lineStyle: { width: axisLineWidth, color: '#d7e0ea' } },
+    splitLine: { lineStyle: { width: axisLineWidth, color: '#eef3f8' } }
+  })
+
+  if (keyChartMode.value === 'time') {
+    series.push({
+      name: '分时(收盘)',
+      type: 'line',
+      data: closeData,
+      smooth: true,
+      symbol: 'none',
+      lineStyle: { color: '#2f8cb7', width: alignToDevicePixel(1.5) },
+      markLine: levelMarkLine
+    })
+  } else {
+    series.push({
+      name: 'K线',
+      type: 'candlestick',
+      data: candlestickData,
+      itemStyle: {
+        color: '#ef232a',
+        color0: '#14b143',
+        borderColor: '#ef232a',
+        borderColor0: '#14b143'
       },
-      {
-        type: 'category',
-        gridIndex: 1,
-        data: dates,
-        boundaryGap: false,
-        scale: true,
-        min: 'dataMin',
-        max: 'dataMax',
-        axisLabel: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: false }
-      }
-    ],
-    yAxis: [
-      { scale: true, splitArea: { show: true } },
-      {
-        scale: true,
-        gridIndex: 1,
-        splitNumber: 2,
-        axisLabel: { show: false },
-        axisTick: { show: false },
-        splitLine: { show: false }
-      }
-    ],
-    dataZoom: [
-      { type: 'inside', xAxisIndex: [0, 1], start: 70, end: 100 },
-      { type: 'slider', xAxisIndex: [0, 1], top: '92%', start: 70, end: 100 }
-    ],
-    series: [
-      {
-        name: 'K线',
-        type: 'candlestick',
-        data: candlestickData,
-        itemStyle: {
-          color: '#ef232a',
-          color0: '#14b143',
-          borderColor: '#ef232a',
-          borderColor0: '#14b143'
-        },
-        markLine: levelMarkLine
-      },
+      markLine: levelMarkLine
+    })
+    series.push(
       {
         name: 'MA5',
         type: 'line',
@@ -2383,15 +3750,84 @@ const keyKlineOption = computed(() => {
         smooth: true,
         symbol: 'none',
         lineStyle: { color: '#f92672', opacity: 0.9 }
-      },
-      {
-        name: '成交额',
-        type: 'bar',
-        xAxisIndex: 1,
-        yAxisIndex: 1,
-        data: volumeData
       }
-    ]
+    )
+  }
+
+  cursorPct += mainHeightPct
+  subPanels.forEach((panel, idx) => {
+    grid.push({
+      left: alignToDevicePixel(56),
+      right: alignToDevicePixel(36),
+      top: pct(cursorPct),
+      height: pct(subHeightPct),
+      containLabel: false
+    })
+    xAxis.push({
+      type: 'category',
+      gridIndex: idx + 1,
+      data: dates,
+      boundaryGap: false,
+      scale: true,
+      min: 'dataMin',
+      max: 'dataMax',
+      axisLine: { lineStyle: { width: axisLineWidth, color: '#d7e0ea' } },
+      axisLabel: { show: idx === subPanels.length - 1 },
+      axisTick: { show: idx === subPanels.length - 1 },
+      splitLine: { show: false }
+    })
+    yAxis.push({
+      scale: true,
+      gridIndex: idx + 1,
+      splitNumber: 2,
+      axisLine: { lineStyle: { width: axisLineWidth, color: '#d7e0ea' } },
+      axisLabel: { show: true },
+      axisTick: { show: false },
+      splitLine: { show: false }
+    })
+    series.push({
+      name: panel.name,
+      type: 'bar',
+      xAxisIndex: idx + 1,
+      yAxisIndex: idx + 1,
+      data: panel.data,
+      itemStyle: { opacity: 0.86 }
+    })
+    cursorPct += subHeightPct
+  })
+
+  const dataZoomAxisIndexes = xAxis.map((_, idx) => idx)
+  const legendItems = series
+    .map(item => item.name)
+    .filter(name => String(name || '').trim() !== '')
+
+  return {
+    animation: false,
+    color: ['#4ECDC4', '#ffbf00', '#f92672'],
+    axisPointer: {
+      link: [{ xAxisIndex: 'all' }],
+      snap: true
+    },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: {
+        type: 'cross',
+        lineStyle: { width: axisLineWidth, color: '#6f7f90' }
+      }
+    },
+    legend: {
+      data: legendItems,
+      top: 24,
+      right: 10
+    },
+    grid,
+    xAxis,
+    yAxis,
+    dataZoom: [
+      { type: 'inside', xAxisIndex: dataZoomAxisIndexes, start: 70, end: 100 },
+      { type: 'slider', xAxisIndex: dataZoomAxisIndexes, top: '92%', start: 70, end: 100 }
+    ],
+    series
   }
 })
 
@@ -2408,6 +3844,14 @@ const formatWatchChange = (value) => {
 }
 
 const formatWatchAmount = (value) => {
+  const num = Number(value || 0)
+  if (!Number.isFinite(num) || num <= 0) return '--'
+  if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
+  if (num >= 10000) return `${(num / 10000).toFixed(2)}万`
+  return num.toFixed(0)
+}
+
+const formatWatchVolume = (value) => {
   const num = Number(value || 0)
   if (!Number.isFinite(num) || num <= 0) return '--'
   if (num >= 100000000) return `${(num / 100000000).toFixed(2)}亿`
@@ -2574,7 +4018,9 @@ const buildKeyWatchStock = (item = {}) => {
     name: (item.name || item.名称 || '').trim() || code,
     latest_price: Number(item.latest_price ?? item.最新价 ?? 0) || 0,
     change_pct: Number(item.change_pct ?? item.涨跌幅 ?? 0) || 0,
-    amount: Number(item.amount ?? item.成交额 ?? 0) || 0
+    amount: Number(item.amount ?? item.成交额 ?? 0) || 0,
+    volume: Number(item.volume ?? item.成交量 ?? 0) || 0,
+    group: String(item.group || item.group_name || '').trim() || '默认分组'
   }
 }
 
@@ -2585,6 +4031,7 @@ const getKeyBoardConfig = (strategy) => {
 }
 
 const hydrateKeyBoardFromStrategy = (strategy) => {
+  keyBoardHydrating.value = true
   const board = getKeyBoardConfig(strategy)
   const rawWatchlist = Array.isArray(board.watchlist) ? board.watchlist : []
   const nextWatchlist = []
@@ -2595,7 +4042,7 @@ const hydrateKeyBoardFromStrategy = (strategy) => {
     seen.add(built.code)
     nextWatchlist.push(built)
   })
-  keyWatchlist.value = nextWatchlist.slice(0, 30)
+  keyWatchlist.value = nextWatchlist.slice(0, KEY_WATCHLIST_MAX)
 
   const selectedCode = normalizeStockCode(board.selected_code || '')
   if (selectedCode && keyWatchlist.value.some(item => item.code === selectedCode)) {
@@ -2610,6 +4057,28 @@ const hydrateKeyBoardFromStrategy = (strategy) => {
     64
   )
   keyLevelWindowDays.value = Number(board.window_days || 3650) || 3650
+  keyChartMode.value = ['kline', 'time'].includes(String(board.chart_mode || ''))
+    ? String(board.chart_mode)
+    : 'kline'
+  keyAdjustMode.value = ['none', 'qfq', 'hfq'].includes(String(board.adjust_mode || ''))
+    ? String(board.adjust_mode)
+    : 'none'
+  keySubIndicatorMode.value = ['both', 'volume', 'amount'].includes(String(board.sub_indicator_mode || ''))
+    ? String(board.sub_indicator_mode)
+    : 'both'
+  keyWatchGroupBy.value = ['custom', 'market', 'change'].includes(String(board.group_by || ''))
+    ? String(board.group_by)
+    : 'custom'
+  keyWatchSortField.value = keyWatchSortFieldOptions.some(item => item.value === board.sort_field)
+    ? board.sort_field
+    : 'change_pct'
+  keyWatchSortOrder.value = board.sort_order === 'asc' ? 'asc' : 'desc'
+  keyWatchFilterGroup.value = '__all__'
+  nextTick(() => {
+    resetKeyWatchListScroll()
+    updateKeyWatchViewport()
+    keyBoardHydrating.value = false
+  })
 }
 
 const persistKeyBoardState = async () => {
@@ -2626,11 +4095,19 @@ const persistKeyBoardState = async () => {
       name: item.name,
       latest_price: item.latest_price,
       change_pct: item.change_pct,
-      amount: item.amount
+      amount: item.amount,
+      volume: item.volume,
+      group: item.group || '默认分组'
     })),
     selected_code: keySelectedCode.value || '',
     pane_width_percent: keyPaneWidthPercent.value,
-    window_days: keyLevelWindowDays.value
+    window_days: keyLevelWindowDays.value,
+    chart_mode: keyChartMode.value,
+    adjust_mode: keyAdjustMode.value,
+    sub_indicator_mode: keySubIndicatorMode.value,
+    group_by: keyWatchGroupBy.value,
+    sort_field: keyWatchSortField.value,
+    sort_order: keyWatchSortOrder.value
   }
 
   try {
@@ -2659,7 +4136,9 @@ const queryKeyWatchStockSuggestions = async (queryString, cb) => {
       name: item.名称,
       latest_price: Number(item.最新价 || 0),
       change_pct: Number(item.涨跌幅 || 0),
-      amount: Number(item.成交额 || 0)
+      amount: Number(item.成交额 || 0),
+      volume: Number(item.成交量 || 0),
+      group: '默认分组'
     }))
     cb(suggestions)
   } catch (error) {
@@ -2678,13 +4157,14 @@ const addWatchStock = async (candidate) => {
     ElMessage.warning('该股票已在自选列表')
     return
   }
-  if (keyWatchlist.value.length >= 30) {
-    ElMessage.warning('自选股上限为 30 只')
+  if (keyWatchlist.value.length >= KEY_WATCHLIST_MAX) {
+    ElMessage.warning(`自选股上限为 ${KEY_WATCHLIST_MAX} 只`)
     return
   }
   keyWatchlist.value.push(stock)
   keyStockSearchQuery.value = ''
   if (!keySelectedCode.value) keySelectedCode.value = stock.code
+  nextTick(() => updateKeyWatchViewport())
   await persistKeyBoardState()
   await loadKeyStockKline(keySelectedCode.value)
 }
@@ -2714,6 +4194,29 @@ const onKeyLevelWindowChange = async () => {
   if (keySelectedCode.value) await loadKeyStockKline(keySelectedCode.value)
 }
 
+const renameWatchStockGroup = async (stock) => {
+  const code = normalizeStockCode(stock?.code || '')
+  if (!code) return
+  const current = keyWatchlist.value.find(item => item.code === code)
+  if (!current) return
+  try {
+    const { value } = await ElMessageBox.prompt('请输入分组名称', '设置分组', {
+      inputValue: String(current.group || '默认分组'),
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    const nextGroup = String(value || '').trim() || '默认分组'
+    keyWatchlist.value = keyWatchlist.value.map(item => (
+      item.code === code
+        ? { ...item, group: nextGroup }
+        : item
+    ))
+    await persistKeyBoardState()
+  } catch (error) {
+    if (error !== 'cancel') console.error(error)
+  }
+}
+
 const removeWatchStock = async (code) => {
   const normalized = normalizeStockCode(code)
   const next = keyWatchlist.value.filter(item => item.code !== normalized)
@@ -2726,6 +4229,7 @@ const removeWatchStock = async (code) => {
       keyLevels.value = []
     }
   }
+  nextTick(() => updateKeyWatchViewport())
   await persistKeyBoardState()
   if (keySelectedCode.value) await loadKeyStockKline(keySelectedCode.value)
 }
@@ -2765,14 +4269,16 @@ const loadKeyStockKline = async (stockCode) => {
     const latestPrice = Number(latest?.close || 0)
     const prevClose = Number(prev?.close || latest?.open || 0)
     const changePct = prevClose ? ((latestPrice - prevClose) / prevClose) * 100 : 0
-    const amount = Number(latest?.amount || latest?.volume || 0)
+    const amount = Number(latest?.amount || 0)
+    const volume = Number(latest?.volume || 0)
     const idx = keyWatchlist.value.findIndex(item => item.code === code)
     if (idx >= 0) {
       keyWatchlist.value[idx] = {
         ...keyWatchlist.value[idx],
         latest_price: latestPrice,
         change_pct: changePct,
-        amount
+        amount,
+        volume
       }
     }
   } catch (error) {
@@ -3138,10 +4644,10 @@ const buildDefaultWidgets = (viewType) => {
       layout: { x: 0, y: 0, w: 640, h: 420 }
     },
     {
-      id: 'index-kline',
-      type: 'index_kline',
+      id: 'analysis-kline',
+      type: 'analysis_kline',
       title: '上证指数 K线',
-      params: { index_name: '上证指数', days_range: 60 },
+      params: { target_type: 'index', target_value: '上证指数', days: 60 },
       layout: { x: 0, y: 434, w: 720, h: 520 }
     }
   ]
@@ -3171,6 +4677,7 @@ const saveWatchWidgetConfig = async ({ silent = true } = {}) => {
     ? { ...strategy.config }
     : {}
   currentConfig.widgets = normalizedDefs.map(item => serializeWidgetDef(item))
+  currentConfig.watchlist_groups = serializeWatchlistGroups()
 
   try {
     const res = await ApiService.updateStrategyWatchStrategy(strategy.id, {
@@ -3282,6 +4789,85 @@ const removeWatchWidget = async (widgetId) => {
   await saveWatchWidgetConfig({ silent: false })
 }
 
+const loadWatchlistWidgetRows = async (stockItems = [], maxCount = 50) => {
+  const normalizedStockItems = Array.isArray(stockItems)
+    ? stockItems
+      .map(item => ({
+        code: normalizeStockCode(item?.code || ''),
+        name: String(item?.name || '').trim()
+      }))
+      .filter(item => !!item.code)
+    : []
+  const normalizedCodes = [...new Set(normalizedStockItems.map(item => item.code))]
+  if (!normalizedCodes.length) return []
+
+  const selectedCodes = normalizedCodes.slice(0, clampNumber(Number(maxCount || 50) || 50, 1, 200))
+  const rows = await Promise.all(selectedCodes.map(async (code) => {
+    try {
+      const res = await ApiService.getStockKline(code, 5, null, 'data')
+      const klineRows = res?.data?.data?.kline_data || []
+      if (!Array.isArray(klineRows) || !klineRows.length) {
+        return {
+          code,
+          name: code,
+          latest_price: 0,
+          change_pct: 0,
+          pct5: 0,
+          pct10: 0,
+          amount: 0
+        }
+      }
+      const latest = klineRows[klineRows.length - 1] || {}
+      const prev = klineRows[klineRows.length - 2] || {}
+      const back5 = klineRows[Math.max(0, klineRows.length - 6)] || {}
+      const back10 = klineRows[Math.max(0, klineRows.length - 11)] || {}
+      const latestPrice = Number(latest.close || 0) || 0
+      const prevClose = Number(prev.close || latest.open || 0) || 0
+      const base5 = Number(back5.close || back5.open || 0) || 0
+      const base10 = Number(back10.close || back10.open || 0) || 0
+      const changePct = prevClose ? ((latestPrice - prevClose) / prevClose) * 100 : 0
+      const pct5 = base5 ? ((latestPrice - base5) / base5) * 100 : 0
+      const pct10 = base10 ? ((latestPrice - base10) / base10) * 100 : 0
+      const amount = Number(latest.amount || 0) || 0
+      const named = normalizedStockItems.find(item => item.code === code)
+      const cached = keyWatchlist.value.find(item => item.code === code)
+      return {
+        code,
+        name: named?.name || cached?.name || code,
+        latest_price: latestPrice,
+        change_pct: changePct,
+        pct5,
+        pct10,
+        amount
+      }
+    } catch (error) {
+      return {
+        code,
+        name: code,
+        latest_price: 0,
+        change_pct: 0,
+        pct5: 0,
+        pct10: 0,
+        amount: 0
+      }
+    }
+  }))
+  return rows
+}
+
+const pickChartHtml = (res, key = '') => {
+  const data = res?.data || {}
+  if (typeof data?.chart_html === 'string' && data.chart_html) return data.chart_html
+  if (typeof data?.data?.chart_html === 'string' && data.data.chart_html) return data.data.chart_html
+  if (key) {
+    const top = data?.[key]?.chart_html
+    if (typeof top === 'string' && top) return top
+    const nested = data?.data?.[key]?.chart_html
+    if (typeof nested === 'string' && nested) return nested
+  }
+  return ''
+}
+
 const renderWatchWidget = async (widget, sentimentCache = null) => {
   const source = widget && typeof widget === 'object' ? widget : {}
   try {
@@ -3303,11 +4889,46 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
       }
     }
 
+    if (source.type === 'analysis_kline') {
+      const target = getAnalysisTarget(source.params || {})
+      if (target.type === 'stock') {
+        const res = await ApiService.getStockKline(target.value, target.days, null, 'chart')
+        const chartHtml = pickChartHtml(res, target.value)
+        return {
+          ...source,
+          title: `${target.value} K线`,
+          chartHtml: chartHtml || '<div>暂无个股图表</div>',
+          error: chartHtml ? '' : '个股图表为空'
+        }
+      }
+      if (target.type === 'index') {
+        const res = await ApiService.getIndexKlineChart(target.value, target.days)
+        const chartHtml = pickChartHtml(res, target.value)
+        return {
+          ...source,
+          title: `${target.value} K线`,
+          chartHtml: chartHtml || '<div>暂无指数图表</div>',
+          error: chartHtml ? '' : '指数图表为空'
+        }
+      }
+      const res = await ApiService.getSingleSectorKline(target.value, {
+        days_range: target.days,
+        format: 'chart'
+      })
+      const chartHtml = pickChartHtml(res, target.value)
+      return {
+        ...source,
+        title: `${target.value} K线`,
+        chartHtml: chartHtml || '<div>暂无板块图表</div>',
+        error: chartHtml ? '' : '板块图表为空'
+      }
+    }
+
     if (source.type === 'index_kline') {
       const indexName = source.params?.index_name || '上证指数'
       const daysRange = source.params?.days_range || 60
       const res = await ApiService.getIndexKlineChart(indexName, daysRange)
-      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html || res?.data?.[indexName]?.chart_html
+      const chartHtml = pickChartHtml(res, indexName)
       return {
         ...source,
         title: source.title || `${indexName} K线`,
@@ -3323,7 +4944,7 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
         days_range: daysRange,
         format: 'chart'
       })
-      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+      const chartHtml = pickChartHtml(res, sectorName)
       return {
         ...source,
         title: source.title || `${sectorName} K线`,
@@ -3336,12 +4957,66 @@ const renderWatchWidget = async (widget, sentimentCache = null) => {
       const stockCode = normalizeStockWidgetCode(source.params?.stock_code || '000001')
       const days = clampNumber(Number(source.params?.days || 120) || 120, 20, 500)
       const res = await ApiService.getStockKline(stockCode, days, null, 'chart')
-      const chartHtml = res?.data?.chart_html || res?.data?.data?.chart_html
+      const chartHtml = pickChartHtml(res, stockCode)
       return {
         ...source,
         title: source.title || `${stockCode} K线`,
         chartHtml: chartHtml || '<div>暂无个股图表</div>',
         error: chartHtml ? '' : '个股图表为空'
+      }
+    }
+
+    if (source.type === 'watchlist_panel') {
+      const groupId = String(source.params?.group_id || '').trim()
+      const maxCount = clampNumber(Number(source.params?.max_count || 50) || 50, 1, 10000)
+      const columns = normalizeWidgetParams('watchlist_panel', source.params || {}).columns
+      const targetGroup = groupId
+        ? watchlistGroups.value.find(item => item.id === groupId)
+        : (watchlistGroups.value[0] || null)
+      const groupItems = Array.isArray(targetGroup?.items) ? targetGroup.items : []
+      const stockItems = groupItems.filter(item => item?.type === 'stock')
+      const stockRows = await loadWatchlistWidgetRows(stockItems, maxCount)
+      const stockMap = new Map(stockRows.map(item => [item.code, item]))
+      const watchlistRows = groupItems.slice(0, maxCount).map(item => {
+        if (item.type === 'stock') {
+          const code = normalizeStockCode(item.code)
+          const enriched = stockMap.get(code)
+          return {
+            type: 'stock',
+            code,
+            name: item.name || enriched?.name || code,
+            latest_price: enriched?.latest_price || 0,
+            change_pct: enriched?.change_pct || 0,
+            pct5: enriched?.pct5 || 0,
+            pct10: enriched?.pct10 || 0,
+            amount: enriched?.amount || 0
+          }
+        }
+        return {
+          type: item.type === 'index' ? 'index' : 'sector',
+          code: '--',
+          name: item.name || '--',
+          latest_price: 0,
+          change_pct: 0,
+          pct5: 0,
+          pct10: 0,
+          amount: 0
+        }
+      })
+      return {
+        ...source,
+        title: source.title || `${targetGroup?.name || '自选股列表'}`,
+        chartHtml: '',
+        columns,
+        watchlistGroups: watchlistGroups.value.map(group => ({ id: group.id, name: group.name })),
+        watchlistRows,
+        watchlistMeta: {
+          group_id: String(targetGroup?.id || ''),
+          group_name: String(targetGroup?.name || '默认自选组'),
+          total: groupItems.length,
+          loaded: watchlistRows.length
+        },
+        error: ''
       }
     }
 
@@ -3378,7 +5053,11 @@ const addWidgetFromToolTemplate = async (template, options = {}) => {
   if (!strategy?.id || !template?.id) return
 
   const type = String(template.type || '').trim() || 'market_sentiment_chart'
-  const baseParams = normalizeWidgetParams(type, template.defaults || {})
+  const draftDefaults = { ...(template.defaults || {}) }
+  if (type === 'watchlist_panel') {
+    draftDefaults.group_id = String(activeWatchlistGroupId.value || watchlistGroups.value[0]?.id || '').trim()
+  }
+  const baseParams = normalizeWidgetParams(type, draftDefaults)
   const title = buildWidgetTitle(type, baseParams)
   const preferredLayout = options?.layout && typeof options.layout === 'object'
     ? normalizeWidgetLayout(options.layout, watchWidgetDefs.value.length, type)
@@ -3411,8 +5090,11 @@ const loadWatchWidgets = async () => {
   watchWidgetDefs.value = []
   if (!strategy || !activeMode.value || activeMode.value !== 'strategy_analysis') {
     widgetEditorVisible.value = false
+    watchlistGroups.value = normalizeWatchlistGroups([])
+    ensureActiveWatchlistGroup()
     return
   }
+  hydrateWatchlistGroupsFromStrategy(strategy)
 
   if (isKeyLevelStrategyConfig(strategy)) {
     widgetEditorVisible.value = false
@@ -4274,21 +5956,26 @@ const sendMessage = async () => {
 }
 
 onMounted(async () => {
+  window.addEventListener('resize', handleKeyWatchWindowResize)
   loadPromptTemplatesFromStorage()
   try {
     await loadRuntime()
     await loadResources()
     await loadMemoryProfiles()
+    await loadWatchlistIndexOptions()
     await loadConversations()
     if (!conversations.value.length) await createConversation()
     await loadStrategies()
     await loadWatchWidgets()
+    await nextTick()
+    updateKeyWatchViewport()
   } catch (error) {
     console.error(error)
   }
 })
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleKeyWatchWindowResize)
   groupPopoverVisible.value = false
   promptTemplatePopoverVisible.value = false
   memoryManageVisible.value = false
@@ -4328,6 +6015,32 @@ watch(watchLayoutEditMode, (nextVal) => {
     stopWatchWidgetInteract()
   }
 })
+
+watch(watchlistGroups, () => {
+  ensureActiveWatchlistGroup()
+}, { deep: true })
+
+watch(keyWatchGroupFilterOptions, (options) => {
+  if (Array.isArray(options) && options.some(item => item.value === keyWatchFilterGroup.value)) return
+  keyWatchFilterGroup.value = '__all__'
+})
+
+watch([keyWatchGroupBy, keyWatchSortField, keyWatchSortOrder, keyWatchFilterGroup], () => {
+  resetKeyWatchListScroll()
+  nextTick(() => updateKeyWatchViewport())
+})
+
+watch(keyWatchFlatRows, () => {
+  nextTick(() => updateKeyWatchViewport())
+})
+
+watch(
+  [keyChartMode, keyAdjustMode, keySubIndicatorMode, keyWatchGroupBy, keyWatchSortField, keyWatchSortOrder],
+  () => {
+    if (keyBoardHydrating.value) return
+    persistKeyBoardState()
+  }
+)
 
 watch(memoryManageProfileId, async (nextId) => {
   memoryBindSelectedIds.value = []
@@ -5175,6 +6888,45 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   color: #2a3f55;
 }
 
+.watchlist-group-manager {
+  border-bottom: 1px solid #e5edf6;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: #f8fbff;
+}
+
+.watchlist-group-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.watchlist-group-chip {
+  border: 1px solid #d7e2ee;
+  background: #fff;
+  color: #2f4358;
+  font-size: 12px;
+  line-height: 1;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.watchlist-group-chip.active {
+  border-color: #2f8cb7;
+  color: #1f7aa2;
+  background: #ecf6fb;
+}
+
+.watchlist-add-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
 .watch-widget-tool-collapse {
   padding: 8px 10px 4px;
 }
@@ -5223,8 +6975,8 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 .watch-layout-board {
   position: relative;
   border: 1px solid #e5e9f0;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #f7fbff 0%, #fdfefe 100%);
+  border-radius: 0;
+  background: #ffffff;
   overflow: visible;
   min-height: 360px;
 }
@@ -5238,7 +6990,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
 .watch-layout-board.palette-dragging {
   border-color: #2f8cb7;
-  box-shadow: inset 0 0 0 1px rgba(47, 140, 183, 0.32);
+  box-shadow: none;
 }
 
 .key-board {
@@ -5258,10 +7010,25 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   flex-wrap: wrap;
 }
 
+.key-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.key-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .key-toolbar-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
 }
 
 .key-board-body {
@@ -5270,7 +7037,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   flex: 1;
   min-height: 0;
   border: 1px solid #e5e9f0;
-  border-radius: 10px;
+  border-radius: 0;
   overflow: hidden;
   background: #fff;
 }
@@ -5285,6 +7052,10 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 }
 
 .key-watchlist-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: #2a3f55;
@@ -5292,22 +7063,45 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   border-bottom: 1px solid #e5e9f0;
 }
 
+.key-watchlist-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: #6d7f92;
+}
+
 .key-watchlist-list {
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 8px;
+  position: relative;
+}
+
+.key-watch-group-row {
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  height: 84px;
+  padding: 0 10px;
+  border: 1px dashed #cfdae7;
+  border-radius: 0;
+  background: #f2f7fd;
+  color: #44566b;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .key-watch-item {
+  height: 84px;
   border: 1px solid #dce6f0;
   background: #fff;
-  border-radius: 8px;
-  padding: 8px 10px;
+  border-radius: 0;
+  padding: 6px 10px;
   cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
 }
 
 .key-watch-item.active {
@@ -5325,11 +7119,11 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 }
 
 .key-watch-item .row-top {
-  margin-bottom: 4px;
+  margin-bottom: 1px;
 }
 
 .key-watch-item .row-mid {
-  margin-bottom: 4px;
+  margin-bottom: 1px;
 }
 
 .key-watch-item .name {
@@ -5367,8 +7161,16 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 }
 
 .key-watch-item .row-bottom {
-  font-size: 12px;
+  font-size: 11px;
   color: #66788a;
+}
+
+.key-watch-item .row-actions {
+  margin-top: 1px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
 }
 
 .key-divider {
@@ -5390,28 +7192,39 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 
 .key-chart-title {
   padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   font-size: 13px;
   font-weight: 600;
   color: #2a3f55;
   border-bottom: 1px solid #e5e9f0;
 }
 
+.key-chart-hint {
+  font-size: 12px;
+  color: #6d7f92;
+  padding: 6px 12px 0;
+}
+
 .key-chart-wrap {
   flex: 1;
   min-height: 0;
   min-height: 480px;
-  padding: 8px;
+  padding: 0;
+  background: #fff;
 }
 
 .watch-widget {
   position: absolute;
   background: #fff;
   border: 1px solid #e5e9f0;
-  border-radius: 12px;
+  border-radius: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  box-shadow: 0 2px 8px rgba(19, 55, 82, 0.08);
+  box-shadow: none;
 }
 
 .watch-widget.editable {
@@ -5421,7 +7234,7 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 .watch-widget.moving,
 .watch-widget.resizing {
   border-color: #2f8cb7;
-  box-shadow: 0 10px 28px rgba(31, 122, 162, 0.22);
+  box-shadow: none;
   z-index: 20;
 }
 
@@ -5450,15 +7263,376 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
 .watch-widget-body {
   flex: 1;
   min-height: 0;
-  padding: 8px;
+  padding: 0;
   overflow: hidden;
+  background: #fff;
+}
+
+.widget-watchlist {
+  height: 100%;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  border: 0;
+  background: #fff;
+}
+
+.widget-watchlist-head {
+  padding: 8px 10px;
+  border-bottom: 1px solid #e5e9f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #44566b;
+  font-weight: 600;
+  background: #fff;
+}
+
+.widget-watchlist-tabs {
+  display: flex;
+  align-items: stretch;
+  overflow-x: auto;
+  overflow-y: hidden;
+  border-bottom: 1px solid #e5e9f0;
+  background: #f8fbff;
+}
+
+.widget-watchlist-tabs-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  border-left: 1px solid #e5e9f0;
+  background: #f8fbff;
+  position: sticky;
+  right: 0;
+  z-index: 2;
+}
+
+.widget-watchlist-tab {
+  border: 0;
+  border-right: 1px solid #e5e9f0;
+  background: #f8fbff;
+  color: #5f7388;
+  font-size: 12px;
+  line-height: 1;
+  padding: 8px 10px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.widget-watchlist-tab.active {
+  background: #ecf6fb;
+  color: #1f7aa2;
+}
+
+.widget-watchlist-tab-icon {
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-right: 1px solid #e5e9f0;
+  background: #f8fbff;
+  color: #5f7388;
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.widget-watchlist-tab-icon:hover {
+  color: #1f7aa2;
+  background: #ecf6fb;
+}
+
+.widget-watchlist-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: #fff;
+}
+
+.widget-watchlist-table-head {
+  display: grid;
+  gap: 0;
+  font-size: 12px;
+  color: #5f7388;
+  border-bottom: 1px solid #e5e9f0;
+  background: #f8fbff;
+}
+
+.widget-watchlist-table-head > span {
+  padding: 8px 10px;
+  border-right: 1px solid #e5e9f0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.widget-watchlist-table-head > .seq-head,
+.widget-watchlist-item > .seq-cell {
+  text-align: center;
+  padding: 0;
+}
+
+.watchlist-seq-setting-btn {
+  width: 100%;
+  height: 100%;
+  min-height: 30px;
+  border: 0;
+  background: transparent;
+  color: #5f7388;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.watchlist-seq-setting-btn:hover {
+  color: #1f7aa2;
+  background: #ecf6fb;
+}
+
+.widget-watchlist-item {
+  display: grid;
+  gap: 0;
+  align-items: center;
+  font-size: 12px;
+  color: #44566b;
+  border-bottom: 1px solid #eef2f7;
+  cursor: pointer;
+}
+
+.widget-watchlist-item:hover {
+  background: #f4f9fd;
+}
+
+.widget-watchlist-item > span {
+  padding: 8px 10px;
+  border-right: 1px solid #eef2f7;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.widget-watchlist-item .name {
+  color: #2a3f55;
+  font-weight: 600;
+}
+
+.widget-watchlist-item .code {
+  color: #718194;
+}
+
+.widget-watchlist-item .change.up {
+  color: #d43834;
+}
+
+.widget-watchlist-item .change.down {
+  color: #1d9a57;
+}
+
+.widget-watchlist-item .change.neutral {
+  color: #7b8694;
+}
+
+.watchlist-config-layout {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 12px;
+  min-height: 420px;
+}
+
+.watchlist-config-menu {
+  border: 1px solid #e5e9f0;
+  background: #f8fbff;
+  display: flex;
+  flex-direction: column;
+}
+
+.watchlist-config-menu-item {
+  border: 0;
+  border-bottom: 1px solid #e5e9f0;
+  background: #f8fbff;
+  color: #4a5f78;
+  font-size: 12px;
+  text-align: left;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.watchlist-config-menu-item.active {
+  background: #ecf6fb;
+  color: #1f7aa2;
+  font-weight: 600;
+}
+
+.watchlist-config-main {
+  border: 1px solid #e5e9f0;
+  background: #fff;
+  min-height: 0;
+}
+
+.watchlist-config-panel {
+  height: 100%;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.watchlist-config-panel-head,
+.watchlist-config-group-line {
+  font-size: 12px;
+  color: #5f7388;
+}
+
+.watchlist-config-stock-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.watchlist-config-stock-list {
+  border: 1px solid #e5e9f0;
+  min-height: 280px;
+  max-height: 340px;
+  overflow: auto;
+}
+
+.watchlist-config-stock-item {
+  display: grid;
+  grid-template-columns: 96px 1fr 40px;
+  align-items: center;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 12px;
+}
+
+.watchlist-config-stock-item .stock-code {
+  padding: 8px 10px;
+  color: #6b7f94;
+}
+
+.watchlist-config-stock-item .stock-name {
+  padding: 8px 10px;
+  color: #2a3f55;
+}
+
+.stock-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0 auto;
+  border: 0;
+  background: transparent;
+  font-size: 14px;
+}
+
+.stock-mark.add {
+  cursor: pointer;
+  color: #1f7aa2;
+}
+
+.stock-mark.exists {
+  color: #1d9a57;
+  font-weight: 600;
+}
+
+.watchlist-columns-layout {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 10px;
+  min-height: 360px;
+}
+
+.watchlist-columns-schemes,
+.watchlist-columns-selected {
+  border: 1px solid #e5e9f0;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.watchlist-columns-title {
+  font-size: 12px;
+  color: #4a5f78;
+  font-weight: 600;
+}
+
+.watchlist-scheme-item {
+  border: 1px solid #d7e2ee;
+  background: #fff;
+  color: #4a5f78;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.watchlist-scheme-item.active {
+  border-color: #2f8cb7;
+  background: #ecf6fb;
+  color: #1f7aa2;
+}
+
+.watchlist-selected-list {
+  border: 1px solid #e5e9f0;
+  min-height: 120px;
+  max-height: 160px;
+  overflow: auto;
+}
+
+.watchlist-selected-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid #eef2f7;
+  font-size: 12px;
+  color: #2a3f55;
+}
+
+.watchlist-selected-item button {
+  border: 0;
+  background: transparent;
+  color: #a14d4d;
+  cursor: pointer;
+}
+
+.watchlist-header-search {
+  margin-top: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.watchlist-header-search-results {
+  border: 1px solid #e5e9f0;
+  min-height: 140px;
+  max-height: 180px;
+  overflow: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.watchlist-header-search-results button {
+  border: 1px solid #d7e2ee;
+  background: #fff;
+  color: #4a5f78;
+  font-size: 12px;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
 }
 
 .widget-error {
   font-size: 12px;
   color: #c45656;
   background: #fdecec;
-  border-radius: 8px;
+  border-radius: 0;
   padding: 8px;
 }
 
@@ -5471,7 +7645,15 @@ watch(activeMemoryProfileId, async (nextId, prevId) => {
   cursor: nwse-resize;
   border-right: 2px solid #6fa6c0;
   border-bottom: 2px solid #6fa6c0;
-  border-bottom-right-radius: 8px;
+  border-bottom-right-radius: 0;
+}
+
+.watch-widget-body :deep(.chart-wrapper) {
+  height: 100% !important;
+  margin: 0 !important;
+  background: #fff !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
 }
 
 .widget-tool-layout {

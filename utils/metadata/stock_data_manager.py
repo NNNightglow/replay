@@ -685,8 +685,9 @@ class StockMetadataManager:
             return None
 
 
-    def update_metadata(self, start_date: str = None, end_date: str = None, 
-                       progress_callback=None, fill_gaps: bool = False) -> bool:
+    def update_metadata(self, start_date: str = None, end_date: str = None,
+                       progress_callback=None, fill_gaps: bool = False,
+                       include_bjs_update: bool = False) -> bool:
         """更新股票元数据
         
         Args:
@@ -694,6 +695,7 @@ class StockMetadataManager:
             end_date: 结束日期，格式为'YYYY-MM-DD'
             progress_callback: 进度回调函数
             fill_gaps: 是否填补数据中的空缺（默认False）
+            include_bjs_update: 是否更新北交所数据（默认False）
         """
         if progress_callback:
             progress_callback(0, 100, "开始更新股票元数据")
@@ -1095,73 +1097,76 @@ class StockMetadataManager:
             print(f"ℹ️ 空数据样本: {empty_sample}")
 
         
-        # 获取所有股票列表（获取北交所股票数据）
-        print('正在获取股票列表信息...')
-        stock_info = safe_network_request(
-            ak.stock_info_a_code_name,
-            max_retries=3,
-            timeout_seconds=60,
-            disable_proxy=True
-        )
+        if include_bjs_update:
+            # 获取所有股票列表（获取北交所股票数据）
+            print('正在获取股票列表信息...')
+            stock_info = safe_network_request(
+                ak.stock_info_a_code_name,
+                max_retries=3,
+                timeout_seconds=60,
+                disable_proxy=True
+            )
 
-        if stock_info is not None and not stock_info.empty:
-            print(f'成功获取股票列表，共 {len(stock_info)} 只股票')
-        else:
-            print("⚠️ 获取股票列表失败，跳过北交所数据更新")
-            stock_info = pd.DataFrame()
-
-        if not stock_info.empty:
-            # 过滤code以4, 8, 9开头的行
-            filtered_stocks = stock_info[stock_info['code'].str.startswith(('4', '8', '9'))]
-            all_stock_data = []
-            print(f'更新北交所数据，共 {len(filtered_stocks)} 只股票')
-
-            for code in filtered_stocks['code']:
-                try:
-                    df = safe_network_request(
-                        ak.stock_zh_a_hist,
-                        symbol=code,
-                        period='daily',
-                        start_date=datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y%m%d'),
-                        end_date=datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y%m%d'),
-                        adjust="qfq",
-                        max_retries=2,
-                        timeout_seconds=30,
-                        disable_proxy=True
-                    )
-                    if df is not None and not df.empty:
-                        all_stock_data.append(df)
-                except Exception as e:
-                    print(f"获取股票 {code} 数据失败: {e}")
-                    continue
-
-            if all_stock_data:
-                combined_df = pd.concat(all_stock_data, ignore_index=True)
-                combined_df = combined_df.rename(columns={'股票代码': '代码',})
-                # 用filtered_stocks里code和name做merge，补全名称字段
-                merged_df = combined_df.merge(
-                    filtered_stocks[['code', 'name']],
-                    how='left',
-                    left_on='代码',
-                    right_on='code'
-                )
-                # 把原名称（假设是空的或缺失）替换为filtered_stocks里的name
-                merged_df['名称'] = merged_df['name']
-
-                # 删除多余的列 'code' 和 'name'
-                merged_df.drop(['code', 'name'], axis=1, inplace=True)
-
-                # 转换为polars
-                beijiao_pl = pl.from_pandas(merged_df)
-
-                # 保存为parquet
-                #beijiao_pl.write_parquet("北交所股票历史行情.parquet")
-                print(f'成功处理北交所数据，共 {len(combined_df)} 条记录')
+            if stock_info is not None and not stock_info.empty:
+                print(f'成功获取股票列表，共 {len(stock_info)} 只股票')
             else:
-                print("没有获取到北交所数据")
-                print("继续执行主板合并与保存流程...")
+                print("⚠️ 获取股票列表失败，跳过北交所数据更新")
+                stock_info = pd.DataFrame()
+
+            if not stock_info.empty:
+                # 过滤code以4, 8, 9开头的行
+                filtered_stocks = stock_info[stock_info['code'].str.startswith(('4', '8', '9'))]
+                all_stock_data = []
+                print(f'更新北交所数据，共 {len(filtered_stocks)} 只股票')
+
+                for code in filtered_stocks['code']:
+                    try:
+                        df = safe_network_request(
+                            ak.stock_zh_a_hist,
+                            symbol=code,
+                            period='daily',
+                            start_date=datetime.strptime(start_date, '%Y-%m-%d').strftime('%Y%m%d'),
+                            end_date=datetime.strptime(end_date, '%Y-%m-%d').strftime('%Y%m%d'),
+                            adjust="qfq",
+                            max_retries=2,
+                            timeout_seconds=30,
+                            disable_proxy=True
+                        )
+                        if df is not None and not df.empty:
+                            all_stock_data.append(df)
+                    except Exception as e:
+                        print(f"获取股票 {code} 数据失败: {e}")
+                        continue
+
+                if all_stock_data:
+                    combined_df = pd.concat(all_stock_data, ignore_index=True)
+                    combined_df = combined_df.rename(columns={'股票代码': '代码',})
+                    # 用filtered_stocks里code和name做merge，补全名称字段
+                    merged_df = combined_df.merge(
+                        filtered_stocks[['code', 'name']],
+                        how='left',
+                        left_on='代码',
+                        right_on='code'
+                    )
+                    # 把原名称（假设是空的或缺失）替换为filtered_stocks里的name
+                    merged_df['名称'] = merged_df['name']
+
+                    # 删除多余的列 'code' 和 'name'
+                    merged_df.drop(['code', 'name'], axis=1, inplace=True)
+
+                    # 转换为polars
+                    beijiao_pl = pl.from_pandas(merged_df)
+
+                    # 保存为parquet
+                    #beijiao_pl.write_parquet("北交所股票历史行情.parquet")
+                    print(f'成功处理北交所数据，共 {len(combined_df)} 条记录')
+                else:
+                    print("没有获取到北交所数据")
+                    print("继续执行主板合并与保存流程...")
+            else:
+                print('跳过北交所数据处理（股票列表获取失败）')
         else:
-            print('跳过北交所数据处理（股票列表获取失败）')
+            print('已配置为跳过北交所数据更新')
 
         #### 合并所有新数据并转换为Polars格式 ####
         new_data_pl = None

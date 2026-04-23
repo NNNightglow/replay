@@ -21,6 +21,7 @@ from .visualizers import (
     ChartUtils,
     ChartFormatters,
     UniversalKlineChart,
+    plot_analysis_kline,
     IndexVisualizer,
     StockVisualizer,
     SectorVisualizer,
@@ -188,6 +189,12 @@ class VisualizerManager:
             return MarketVisualizer.plot_change_distribution(change_distribution)
         return "<div>没有涨跌幅分布数据</div>"
 
+
+    # ========== 通用工具 ==========
+    @staticmethod
+    def plot_analysis_kline(data: pl.DataFrame, entity_type: str = "auto", title: str = None, height: str = "600px") -> str:
+        """统一分析K线绘图入口（股票/指数/板块）。"""
+        return plot_analysis_kline(data, entity_type=entity_type, title=title, height=height)
 
     # ========== 通用工具 ==========
     @staticmethod
