@@ -3,7 +3,7 @@ frontend/node_modules/
 frontend/dist/
 # IDE
 .idea/
-
+.claude
 # Python caches
 __pycache__/
 

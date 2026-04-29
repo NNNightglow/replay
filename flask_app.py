@@ -242,11 +242,28 @@ def extract_chart_content(html_content):
 data_fetcher = None
 market_analyzer = None
 market_states = None
-stock_data = None
-stock_metadata = None  # 添加股票元数据全局变量
+stock_metadata = None
 index_data = None
 market_metadata = None
 sector_data = None
+
+
+def _downcast_dataframe(df: pl.DataFrame) -> pl.DataFrame:
+    """将 DataFrame 中的 float64 列降级为 float32、int64 降级为 int32，减少内存占用。
+    成交额/成交量等大数值列保持 int64 不变。"""
+    if df is None or df.is_empty():
+        return df
+    # 这些列的数值可能超过 int32 范围（>21亿），保持 int64
+    _SKIP_INT64 = {'成交额', '成交量', 'amount', 'volume'}
+    cast_exprs = []
+    for col_name, dtype in df.schema.items():
+        if dtype == pl.Float64:
+            cast_exprs.append(pl.col(col_name).cast(pl.Float32))
+        elif dtype == pl.Int64 and col_name not in _SKIP_INT64:
+            cast_exprs.append(pl.col(col_name).cast(pl.Int32))
+    if cast_exprs:
+        df = df.with_columns(cast_exprs)
+    return df
 
 
 def apply_stock_filters(market_states_data: pl.DataFrame,
@@ -310,7 +327,7 @@ def apply_stock_filters(market_states_data: pl.DataFrame,
 def init_system():
     """初始化系统组件 - 优化版本，避免重复初始化"""
     global data_fetcher, market_analyzer, market_states
-    global stock_data, index_data, market_metadata, sector_data
+    global index_data, market_metadata, sector_data
 
     try:
         # 1. 初始化DataFetcher（包含所有数据管理器）
@@ -392,6 +409,20 @@ def init_system():
 
         # 6. 初始化分析器和可视化器
         market_analyzer = MarketAnalyzer
+
+        # 7. 数值列降级（float64->float32, int64->int32），减少内存占用
+        print("📊 优化数据类型以减少内存...")
+        if stock_metadata is not None and not stock_metadata.is_empty():
+            stock_metadata = _downcast_dataframe(stock_metadata)
+        if index_data is not None and not index_data.is_empty():
+            index_data = _downcast_dataframe(index_data)
+        if market_metadata is not None and not market_metadata.is_empty():
+            market_metadata = _downcast_dataframe(market_metadata)
+        if market_states is not None and not market_states.is_empty():
+            market_states = _downcast_dataframe(market_states)
+        if sector_data is not None and not sector_data.is_empty():
+            sector_data = _downcast_dataframe(sector_data)
+        print("✅ 数据类型优化完成")
 
         print("✅ 系统初始化完成")
         return True
@@ -1052,8 +1083,7 @@ def market_metadata():
                 'timestamp': datetime.now().isoformat()
             }), 500
 
-        # 获取市场元数据
-        market_metadata = data_fetcher.market_metadata_manager.load_metadata()
+        # 使用全局 market_metadata，避免重复加载
         if market_metadata is None or market_metadata.is_empty():
             return jsonify({
                 'success': False,
@@ -1061,7 +1091,7 @@ def market_metadata():
                 'timestamp': datetime.now().isoformat()
             }), 500
 
-        # 按日期过滤数据
+        # 按日期过滤数据（在视图上筛选，不复制全局变量）
         if days_back > 0:
             # 获取最近N天的数据
             end_date = datetime.now().date()
@@ -1070,20 +1100,24 @@ def market_metadata():
             # 确保日期列存在
             date_col = '日期' if '日期' in market_metadata.columns else 'date'
             if date_col in market_metadata.columns:
-                market_metadata = market_metadata.filter(
+                filtered_metadata = market_metadata.filter(
                     pl.col(date_col) >= pl.lit(start_date)
                 ).sort(date_col, descending=True)
+            else:
+                filtered_metadata = market_metadata
+        else:
+            filtered_metadata = market_metadata
 
         # 转换为JSON格式
-        metadata_dict = market_metadata.to_dicts()
+        metadata_dict = filtered_metadata.to_dicts()
 
         # 计算统计信息
         stats = {
             'total_days': len(metadata_dict),
-            'avg_red_ratio': round(market_metadata.select('红盘率').mean().item(), 2) if '红盘率' in market_metadata.columns else 0,
-            'avg_limit_up': round(market_metadata.select('涨停数').mean().item(), 2) if '涨停数' in market_metadata.columns else 0,
-            'avg_limit_down': round(market_metadata.select('跌停数').mean().item(), 2) if '跌停数' in market_metadata.columns else 0,
-            'avg_amount': round(market_metadata.select('成交总额').mean().item() / 100000000, 2) if '成交总额' in market_metadata.columns else 0,  # 转换为亿元
+            'avg_red_ratio': round(filtered_metadata.select('红盘率').mean().item(), 2) if '红盘率' in filtered_metadata.columns else 0,
+            'avg_limit_up': round(filtered_metadata.select('涨停数').mean().item(), 2) if '涨停数' in filtered_metadata.columns else 0,
+            'avg_limit_down': round(filtered_metadata.select('跌停数').mean().item(), 2) if '跌停数' in filtered_metadata.columns else 0,
+            'avg_amount': round(filtered_metadata.select('成交总额').mean().item() / 100000000, 2) if '成交总额' in filtered_metadata.columns else 0,  # 转换为亿元
         }
 
         return jsonify({
@@ -1133,7 +1167,7 @@ def market_sentiment_charts():
                 'timestamp': datetime.now().isoformat()
             }), 500
 
-        market_metadata = data_fetcher.market_metadata_manager.load_metadata()
+        # 使用全局 market_metadata，避免重复加载
         if market_metadata is None or market_metadata.is_empty():
             return jsonify({
                 'success': False,
@@ -1163,10 +1197,11 @@ def market_sentiment_charts():
             start_date = end_date - timedelta(days=days_back)
             print(f"🔧 DEBUG: 使用默认日期范围: {start_date} 到 {end_date}")
 
-        # 按日期过滤市场元数据
+        # 按日期过滤市场元数据（筛选视图，不修改全局变量）
         date_col = '日期' if '日期' in market_metadata.columns else 'date'
+        filtered_market_metadata = market_metadata
         if date_col in market_metadata.columns:
-            market_metadata = market_metadata.filter(
+            filtered_market_metadata = market_metadata.filter(
                 (pl.col(date_col) >= pl.lit(start_date)) &
                 (pl.col(date_col) <= pl.lit(end_date))
             ).sort(date_col, descending=True)
@@ -1195,7 +1230,7 @@ def market_sentiment_charts():
         try:
             print("🔧 DEBUG: 开始生成市场元数据图表...", flush=True)
             # 直接使用可视化类生成完整的市场元数据图表
-            market_charts = MarketVisualizer.plot_market_metadata(filtered_market_states, market_metadata)
+            market_charts = MarketVisualizer.plot_market_metadata(filtered_market_states, filtered_market_metadata)
             charts.update(market_charts)
             print(f"🔧 DEBUG: 市场元数据图表生成完成，包含: {list(market_charts.keys())}", flush=True)
         except Exception as e:
@@ -1601,7 +1636,7 @@ def get_stocks_kline():
             # 根据format_type返回不同格式
             if format_type == 'data':
                 # 转换为前端期望的格式
-                kline_data = stock_data.to_pandas().to_dict('records')
+                kline_data = stock_data.to_dicts()
                 formatted_data = []
                 for record in kline_data:
                     formatted_record = {
@@ -1644,7 +1679,7 @@ def get_stocks_kline():
 
             elif format_type == 'both':
                 # 返回数据和图表
-                kline_data = stock_data.to_pandas().to_dict('records')
+                kline_data = stock_data.to_dicts()
                 formatted_data = []
                 for record in kline_data:
                     formatted_record = {
@@ -2347,7 +2382,7 @@ def get_market_indices():
     """获取指数数据"""
     try:
         # 使用已加载的指数元数据
-        if index_metadata is None or index_metadata.is_empty():
+        if index_data is None or index_data.is_empty():
             return jsonify({
                 'success': False,
                 'error': '指数数据未加载',
@@ -2359,17 +2394,17 @@ def get_market_indices():
         start_date = end_date - timedelta(days=30)
 
         # 筛选日期范围内的数据
-        filtered_data = index_metadata.filter(
+        filtered_indices = index_data.filter(
             (pl.col('日期') >= start_date) & (pl.col('日期') <= end_date)
         )
 
         # 转换为字典格式
-        index_data = filtered_data.to_dicts()
+        indices_list = filtered_indices.to_dicts()
 
         return jsonify({
             'success': True,
-            'data': index_data,
-            'total_count': len(index_data),
+            'data': indices_list,
+            'total_count': len(indices_list),
             'timestamp': datetime.now().isoformat()
         })
     except Exception as e:
@@ -2524,15 +2559,19 @@ def _resolve_index_query_to_code(index_query: str) -> str:
     if re.match(r'^\d{6}$', upper):
         return upper
 
-    if data_fetcher is None:
+    # 优先使用全局已加载的 index_data，避免重复加载
+    metadata = index_data
+    if (metadata is None or metadata.is_empty()) and data_fetcher is not None:
+        try:
+            index_manager = getattr(data_fetcher, 'index_metadata_manager', None)
+            if index_manager is None:
+                return query
+            metadata = index_manager.load_metadata()
+        except Exception:
+            return query
+    if metadata is None or metadata.is_empty():
         return query
     try:
-        index_manager = getattr(data_fetcher, 'index_metadata_manager', None)
-        if index_manager is None:
-            return query
-        metadata = index_manager.load_metadata()
-        if metadata is None or metadata.is_empty():
-            return query
         code_col = '代码' if '代码' in metadata.columns else None
         name_col = '名称' if '名称' in metadata.columns else None
         if not code_col or not name_col:
@@ -2547,28 +2586,29 @@ def _resolve_index_query_to_code(index_query: str) -> str:
 
 
 def _resolve_sector_query_to_name(sector_query: str) -> str:
-    """将板块查询参数（名称/代码）统一解析为板块名称。"""
+    """将板块查询参数（名称/代码）统一解析为板块名称。优先使用全局 sector_data。"""
     query = str(sector_query or '').strip()
     if not query:
         return query
-    if data_fetcher is None:
-        return query
     try:
-        sector_manager = getattr(data_fetcher, 'sector_data_manager', None)
-        if sector_manager is None:
+        # 优先使用全局已加载的 sector_data，避免重复加载
+        sd = sector_data
+        if (sd is None or sd.is_empty()) and data_fetcher is not None:
+            sector_manager = getattr(data_fetcher, 'sector_data_manager', None)
+            if sector_manager is None:
+                return query
+            sd = sector_manager.load_sector_data()
+        if sd is None or sd.is_empty():
             return query
-        sector_data = sector_manager.load_sector_data()
-        if sector_data is None or sector_data.is_empty():
-            return query
-        code_col = '板块代码' if '板块代码' in sector_data.columns else None
-        name_col = '板块名称' if '板块名称' in sector_data.columns else None
+        code_col = '板块代码' if '板块代码' in sd.columns else None
+        name_col = '板块名称' if '板块名称' in sd.columns else None
         if not name_col:
             return query
         if code_col:
-            by_code = sector_data.filter(pl.col(code_col).cast(pl.Utf8, strict=False) == query)
+            by_code = sd.filter(pl.col(code_col).cast(pl.Utf8, strict=False) == query)
             if by_code is not None and not by_code.is_empty():
                 return str(by_code.select(pl.col(name_col)).to_series().head(1).to_list()[0] or query)
-        by_name = sector_data.filter(pl.col(name_col) == query)
+        by_name = sd.filter(pl.col(name_col) == query)
         if by_name is not None and not by_name.is_empty():
             return query
     except Exception:
@@ -2953,7 +2993,7 @@ def export_market_metadata():
                 'timestamp': datetime.now().isoformat()
             }), 500
 
-        market_metadata = data_fetcher.market_metadata_manager.load_metadata()
+        # 使用全局 market_metadata，避免重复加载
         if market_metadata is None or market_metadata.is_empty():
             return jsonify({
                 'success': False,
@@ -2961,7 +3001,8 @@ def export_market_metadata():
                 'timestamp': datetime.now().isoformat()
             }), 500
 
-        # 处理日期范围
+        # 处理日期范围（筛选视图，不修改全局变量）
+        export_metadata = market_metadata
         if start_date_str and end_date_str:
             start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
             end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
@@ -2969,7 +3010,7 @@ def export_market_metadata():
             # 按日期过滤数据
             date_col = '日期' if '日期' in market_metadata.columns else 'date'
             if date_col in market_metadata.columns:
-                market_metadata = market_metadata.filter(
+                export_metadata = market_metadata.filter(
                     (pl.col(date_col) >= pl.lit(start_date)) &
                     (pl.col(date_col) <= pl.lit(end_date))
                 )
@@ -2978,11 +3019,9 @@ def export_market_metadata():
             start_date = market_metadata['日期'].min()
             end_date = market_metadata['日期'].max()
 
-        # 转换为pandas DataFrame
-        export_df = market_metadata.to_pandas()
-
         if export_format == 'excel':
-            # 导出为Excel
+            # 导出为Excel（xlsxwriter 需要 pandas）
+            export_df = export_metadata.to_pandas()
             import io
             buffer = io.BytesIO()
             with pd.ExcelWriter(buffer, engine='xlsxwriter') as writer:
@@ -2996,13 +3035,13 @@ def export_market_metadata():
                     'filename': filename,
                     'content': buffer.getvalue().hex(),  # 转换为hex字符串传输
                     'format': 'excel',
-                    'records_count': len(export_df)
+                    'records_count': export_metadata.height
                 },
                 'timestamp': datetime.now().isoformat()
             })
         else:
-            # 导出为CSV
-            csv_content = export_df.to_csv(index=False)
+            # 导出为CSV（直接使用 polars 原生导出，避免转 pandas 额外内存开销）
+            csv_content = export_metadata.write_csv()
             filename = f"market_metadata_{start_date.strftime('%Y%m%d')}_{end_date.strftime('%Y%m%d')}.csv"
 
             return jsonify({
@@ -3011,7 +3050,7 @@ def export_market_metadata():
                     'filename': filename,
                     'content': csv_content,
                     'format': 'csv',
-                    'records_count': len(export_df)
+                    'records_count': export_metadata.height
                 },
                 'timestamp': datetime.now().isoformat()
             })
@@ -3035,7 +3074,7 @@ def get_latest_market_data():
                 'timestamp': datetime.now().isoformat()
             }), 500
 
-        market_metadata = data_fetcher.market_metadata_manager.load_metadata()
+        # 使用全局 market_metadata，避免重复加载
         if market_metadata is None or market_metadata.is_empty():
             return jsonify({
                 'success': False,
@@ -3338,7 +3377,7 @@ def get_sector_kline(sector_name):
             
             # 转换为前端可用的格式
             formatted_data = []
-            for record in sector_data.to_pandas().to_dict('records'):
+            for record in sector_data.to_dicts():
                 formatted_record = {
                     'date': record['日期'].strftime('%Y-%m-%d') if hasattr(record['日期'], 'strftime') else str(record['日期']),
                     'open': float(record.get('开盘', 0)),
@@ -3392,6 +3431,21 @@ def get_sector_kline(sector_name):
 # 简易内存缓存：板块成分股（sector_name + date）
 _sector_stocks_cache = {}
 _SECTOR_STOCKS_CACHE_TTL_SECONDS = 60
+_SECTOR_STOCKS_CACHE_MAX_SIZE = 50  # 最多缓存50个板块，防止内存无限增长
+
+
+def _evict_sector_cache():
+    """淘汰过期和超量的板块缓存条目"""
+    now_ts = datetime.now().timestamp()
+    # 先清除过期条目
+    expired_keys = [k for k, v in _sector_stocks_cache.items()
+                    if now_ts - v.get('ts', 0) >= _SECTOR_STOCKS_CACHE_TTL_SECONDS]
+    for k in expired_keys:
+        _sector_stocks_cache.pop(k, None)
+    # 如果仍然超限，按时间戳淘汰最旧的
+    while len(_sector_stocks_cache) > _SECTOR_STOCKS_CACHE_MAX_SIZE:
+        oldest_key = min(_sector_stocks_cache, key=lambda k: _sector_stocks_cache[k].get('ts', 0))
+        _sector_stocks_cache.pop(oldest_key, None)
 
 # 缓存所有股票的最新一行行情，减少每次分组/聚合开销
 _latest_market_cache = {
@@ -3638,8 +3692,9 @@ def get_sector_stocks(sector_name):
         except Exception:
             pass
 
-        # 写入缓存
+        # 写入缓存（先淘汰过期/超量条目）
         try:
+            _evict_sector_cache()
             _sector_stocks_cache[cache_key] = {'data': enriched_stocks, 'ts': now_ts}
         except Exception:
             pass
