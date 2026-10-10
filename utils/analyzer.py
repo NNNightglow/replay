@@ -314,7 +314,7 @@ class MarketAnalyzer:
         
         # 按日期和概念分组，统计涨停数
         concept_stats = merged_data.group_by(['日期', '概念']).agg([
-            pl.count().alias('涨停数')
+            pl.len().alias('涨停数')
         ])
         # 找出曾经涨停数 > 3 的概念
         hot_concept_names = concept_stats.filter(pl.col('涨停数') > 3).select('概念').unique()

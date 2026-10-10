@@ -67,9 +67,9 @@ def _ensure_date_column(df: pl.DataFrame, column_name: str = '日期') -> pl.Dat
             ])
         if dtype == pl.Utf8:
             # 依次尝试多种日期格式并合并
-            parsed1 = pl.col(column_name).str.strptime(pl.Date, fmt='%Y-%m-%d', strict=False)
-            parsed2 = pl.col(column_name).str.strptime(pl.Date, fmt='%Y/%m/%d', strict=False)
-            parsed3 = pl.col(column_name).str.strptime(pl.Date, fmt='%Y%m%d', strict=False)
+            parsed1 = pl.col(column_name).str.strptime(pl.Date, format='%Y-%m-%d', strict=False)
+            parsed2 = pl.col(column_name).str.strptime(pl.Date, format='%Y/%m/%d', strict=False)
+            parsed3 = pl.col(column_name).str.strptime(pl.Date, format='%Y%m%d', strict=False)
             return df.with_columns([
                 pl.coalesce([parsed1, parsed2, parsed3]).alias(column_name)
             ])
@@ -325,7 +325,7 @@ def compute_limits(df):
     
     # 统计不同涨跌幅限制的股票数量
     limit_stats = df.group_by('涨跌幅限制').agg([
-        pl.count().alias('数量'),
+        pl.len().alias('数量'),
         pl.col('涨停').sum().alias('涨停数量'),
         pl.col('跌停').sum().alias('跌停数量'),
         pl.col('炸板').sum().alias('炸板数量')
@@ -695,7 +695,7 @@ class MarketMetadataManager:
         
         # 一次性计算所有基本指标
         counts = day_data.select([
-            pl.count().alias('总股票数'),
+            pl.len().alias('总股票数'),
             pl.sum(pl.col('涨跌幅') > 0).alias('上涨股票数'),
             pl.sum(pl.col('涨跌幅') < 0).alias('下跌股票数'),
             pl.sum(pl.col('涨跌幅') == 0).alias('平盘股票数'),
@@ -793,7 +793,7 @@ class MarketMetadataManager:
             .drop_nulls()
             .filter(pl.col('lb') > 0)
             .group_by('lb')
-            .agg(pl.count().alias('n'))
+            .agg(pl.len().alias('n'))
         )
 
         if dist_df.is_empty():

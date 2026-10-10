@@ -403,7 +403,7 @@ def init_system():
             # 显示板块类型分布
             if '板块类型' in sector_data.columns:
                 type_stats = sector_data.group_by("板块类型").agg([
-                    pl.count().alias("数量")
+                    pl.len().alias("数量")
                 ])
                 print(f"板块类型分布: {type_stats.to_dicts()}")
 

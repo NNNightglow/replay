@@ -1755,7 +1755,7 @@ class SectorDataManager:
             joined = limit_up.join(constituents_pl, on="代码", how="inner")
             if joined.is_empty():
                 return df
-            counts = joined.group_by(["日期", "板块名称"]).agg(pl.count().alias("涨停数"))
+            counts = joined.group_by(["日期", "板块名称"]).agg(pl.len().alias("涨停数"))
             result = df.join(counts, on=["日期", "板块名称"], how="left")
             if "涨停数" in result.columns:
                 result = result.with_columns([pl.col("涨停数").fill_null(0).cast(pl.Int64).alias("涨停数")])

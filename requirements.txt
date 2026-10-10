@@ -1,8 +1,9 @@
 # Core data
 pandas==2.3.1
-polars==0.19.12
+polars>=1.35,<2
 numpy==2.2.6
 pyarrow==20.0.0
+duckdb==1.2.1
 
 # Market data sources
 akshare==1.17.19
@@ -22,6 +23,7 @@ pyecharts==2.0.8
 beautifulsoup4==4.13.4
 requests==2.32.5
 holidays==0.73
+pypinyin==0.55.0
 
 # Excel export
 openpyxl==3.1.5
